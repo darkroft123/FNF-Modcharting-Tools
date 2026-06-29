@@ -224,15 +224,15 @@ class ModchartFuncs
                 return;
             }
 
-        var mod = Type.resolveClass('modcharting.'+modClass);
-        if (mod == null) {mod = Type.resolveClass('modcharting.'+modClass+"Modifier");} //dont need to add "Modifier" to the end of every mod
+		var mod = Type.resolveClass('modcharting.'+modClass);
+		if (mod == null) {mod = Type.resolveClass('modcharting.'+modClass+"Modifier");} //dont need to add "Modifier" to the end of every mod
 
-        if (mod != null)
-        {
-            var modType = getModTypeFromString(type);
-            var modifier = Type.createInstance(mod, [name, modType, pf]);
-            instance.playfieldRenderer.modifierTable.add(modifier);
-        }
+		if (mod != null)
+		{
+			var modType = getModTypeFromString(type);
+			var modifier:Modifier = cast Type.createInstance(mod, [name, modType, pf]);
+			instance.playfieldRenderer.modifierTable.add(modifier);
+		}
     }
     public static function getModTypeFromString(type:String)
     {
@@ -276,12 +276,24 @@ class ModchartFuncs
             else
                 instance.playfieldRenderer.modifiers.get(name).subValues.set(subValName,new Modifier.ModifierSubValue(value));
     }
-    public static function setModTargetLane(name:String, value:Int, ?instance:ModchartMusicBeatState = null)
-    {
+   public static function setModTargetLane(name:String, value:Dynamic, ?instance:ModchartMusicBeatState = null)
+        {
         if (instance == null)
             instance = PlayState.instance;
+
         if (instance.playfieldRenderer.modifierTable.modifiers.exists(name))
-            instance.playfieldRenderer.modifierTable.modifiers.get(name).targetLane = value;
+        {
+            var mod = instance.playfieldRenderer.modifierTable.modifiers.get(name);
+
+            if (Std.isOfType(value, Array))
+            {
+                mod.targetLane = Std.int((cast value:Array<Dynamic>)[0]);
+            }
+            else
+            {
+                mod.targetLane = Std.int(value);
+            }
+        }
     }
     public static function setModPlayfield(name:String, value:Int, ?instance:ModchartMusicBeatState = null)
     {

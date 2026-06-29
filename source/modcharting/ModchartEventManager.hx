@@ -6,6 +6,7 @@ import game.Conductor;
 
 class ModchartEventManager {
 	public var renderer:PlayfieldRenderer;
+	var eventIndex:Int = 0;
 
 	public function new(renderer:PlayfieldRenderer) {
 		this.renderer = renderer;
@@ -14,33 +15,39 @@ class ModchartEventManager {
 	public var events:Array<ModchartEvent> = [];
 
 	public function update(elapsed:Float) {
-		while (events.length > 0) {
-			var event:ModchartEvent = events[0];
+		var safety = 0;
+		while (eventIndex < events.length && safety < 1000) {
+			var event:ModchartEvent = events[eventIndex];
 			if (Conductor.songPosition < event.time) {
 				break;
 			}
-			// Reflect.callMethod(this, event.func, event.args);
 			event.func(event.args);
-			events.shift();
+			eventIndex++;
+			safety++;
+		}
+		if (eventIndex > 256) {
+			events = events.slice(eventIndex);
+			eventIndex = 0;
 		}
 		Modifier.beat = ((Conductor.songPosition * 0.001) * (Conductor.bpm / 60));
 	}
 
 	public inline function addEvent(beat:Float, func:Array<String>->Void, args:Array<String>) {
-		events.push(new ModchartEvent(ModchartUtil.getTimeFromBeat(beat), func, args));
-		if (events.length > 1) {
-			events.sort(function(a, b) {
-				if (a.time < b.time)
-					return -1;
-				else if (a.time > b.time)
-					return 1;
-				else
-					return 0;
-			});
+		var newEvent = new ModchartEvent(ModchartUtil.getTimeFromBeat(beat), func, args);
+		var inserted = false;
+		for (i in eventIndex...events.length) {
+			if (newEvent.time < events[i].time) {
+				events.insert(i, newEvent);
+				inserted = true;
+				break;
+			}
 		}
+		if (!inserted)
+			events.push(newEvent);
 	}
 
 	public inline function clearEvents() {
 		events = [];
+		eventIndex = 0;
 	}
 }

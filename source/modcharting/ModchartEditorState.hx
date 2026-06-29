@@ -1,6 +1,7 @@
 package modcharting;
 
 import game.SoundGroup;
+import math.TweenGraph;
 import lime.utils.Assets;
 import flixel.graphics.frames.FlxFramesCollection;
 import flixel.util.FlxAxes;
@@ -69,7 +70,7 @@ import modcharting.*;
 import modcharting.PlayfieldRenderer.StrumNoteType;
 import modcharting.Modifier;
 import modcharting.ModchartFile;
-
+import modcharting.LanePathRenderer;		
 using StringTools;
 using utilities.BackgroundUtil;
 
@@ -199,6 +200,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		SkewModifier,
 		SkewXModifier,
 		SkewYModifier,
+		// Field modifiers
+		FieldPitchModifier,
+		FieldYawModifier,
+		FieldRollModifier,
 		// Modifiers with curpos math!!!
 		// Drunk Modifiers
 		DrunkXModifier,
@@ -233,6 +238,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		TanWaveYModifier,
 		TanWaveZModifier,
 		TanWaveAngleModifier,
+		WiggleXModifier,
+		WiggleYModifier,
+		WiggleZModifier,
 		// Scroll Modifiers
 		ReverseModifier,
 		CrossModifier,
@@ -269,6 +277,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		StrumBounceXModifier,
 		StrumBounceYModifier,
 		StrumBounceZModifier,
+		HopModifier,
 		BumpyModifier,
 		BeatXModifier,
 		BeatYModifier,
@@ -347,28 +356,29 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	];
 
 	// used for indexing
-	public static var MOD_NAME = ModchartFile.MOD_NAME; // the modifier name
-	public static var MOD_CLASS = ModchartFile.MOD_CLASS; // the class/custom mod it uses
-	public static var MOD_TYPE = ModchartFile.MOD_TYPE; // the type, which changes if its for the player, opponent, a specific lane or all
-	public static var MOD_PF = ModchartFile.MOD_PF; // the playfield that mod uses
-	public static var MOD_LANE = ModchartFile.MOD_LANE; // the lane the mod uses
+	public static inline final MOD_NAME = ModchartFile.MOD_NAME; // the modifier name
+	public static inline final MOD_CLASS = ModchartFile.MOD_CLASS; // the class/custom mod it uses
+	public static inline final MOD_TYPE = ModchartFile.MOD_TYPE; // the type, which changes if its for the player, opponent, a specific lane or all
+	public static inline final MOD_PF = ModchartFile.MOD_PF; // the playfield that mod uses
+	public static inline final MOD_LANE = ModchartFile.MOD_LANE; // the lane the mod uses
 
-	public static var EVENT_TYPE = ModchartFile.EVENT_TYPE; // event type (set or ease)
-	public static var EVENT_DATA = ModchartFile.EVENT_DATA; // event data
-	public static var EVENT_REPEAT = ModchartFile.EVENT_REPEAT; // event repeat data
+	public static inline final EVENT_TYPE = ModchartFile.EVENT_TYPE; // event type (set or ease)
+	public static inline final EVENT_DATA = ModchartFile.EVENT_DATA; // event data
+	public static inline final EVENT_REPEAT = ModchartFile.EVENT_REPEAT; // event repeat data
 
-	public static var EVENT_TIME = ModchartFile.EVENT_TIME; // event time (in beats)
-	public static var EVENT_SETDATA = ModchartFile.EVENT_SETDATA; // event data (for sets)
-	public static var EVENT_EASETIME = ModchartFile.EVENT_EASETIME; // event ease time
-	public static var EVENT_EASE = ModchartFile.EVENT_EASE; // event ease
-	public static var EVENT_EASEDATA = ModchartFile.EVENT_EASEDATA; // event data (for eases)
+	public static inline final EVENT_TIME = ModchartFile.EVENT_TIME; // event time (in beats)
+	public static inline final EVENT_SETDATA = ModchartFile.EVENT_SETDATA; // event data (for sets)
+	public static inline final EVENT_EASETIME = ModchartFile.EVENT_EASETIME; // event ease time
+	public static inline final EVENT_EASE = ModchartFile.EVENT_EASE; // event ease
+	public static inline final EVENT_EASEDATA = ModchartFile.EVENT_EASEDATA; // event data (for eases)
 
-	public static var EVENT_REPEATBOOL = ModchartFile.EVENT_REPEATBOOL; // if event should repeat
-	public static var EVENT_REPEATCOUNT = ModchartFile.EVENT_REPEATCOUNT; // how many times it repeats
-	public static var EVENT_REPEATBEATGAP = ModchartFile.EVENT_REPEATBEATGAP; // how many beats in between each repeat
+	public static inline final EVENT_REPEATBOOL = ModchartFile.EVENT_REPEATBOOL; // if event should repeat
+	public static inline final EVENT_REPEATCOUNT = ModchartFile.EVENT_REPEATCOUNT; // how many times it repeats
+	public static inline final EVENT_REPEATBEATGAP = ModchartFile.EVENT_REPEATBEATGAP; // how many beats in between each repeat
 
 	public var camHUD:FlxCamera;
 	public var camGame:FlxCamera;
+	public var camNotes:PerspectiveCamera;
 	public var notes:FlxTypedGroup<Note>;
 
 	public var strumLine:FlxSprite;
@@ -419,6 +429,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	var backupGpu:Bool;
 	#end
 
+	public var tweenPreview:TweenGraph = new TweenGraph();
+
+	public var check_diff_modchart:FlxUICheckBox;
+
 	override public function new() {
 		super();
 	}
@@ -448,6 +462,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 		FlxG.cameras.setDefaultDrawTarget(camGame, true);
 		#end
+
+		camNotes = new PerspectiveCamera();
+		camNotes.bgColor.alpha = 0;
+		FlxG.cameras.add(camNotes, false);
 
 		persistentUpdate = true;
 		persistentDraw = true;
@@ -531,8 +549,21 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		generateSong(PlayState.SONG);
 
 		playfieldRenderer = new PlayfieldRenderer(strumLineNotes, notes, this);
-		playfieldRenderer.cameras = [camHUD];
+		playfieldRenderer.cameras = [camNotes];
 		playfieldRenderer.inEditor = true;
+		
+
+		for (lane in 0...NoteMovement.totalKeyCount)
+		{
+			var path = new LanePathRenderer(playfieldRenderer, lane);
+
+			path.cameras = [camNotes];
+			path.visible = true;
+
+			playfieldRenderer.lanePaths.push(path);
+
+			add(path);
+		}
 		add(playfieldRenderer);
 
 		// strumLineNotes.cameras = [camHUD];
@@ -1461,7 +1492,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	var explainText:FlxText;
 	var modTypeInputText:FlxInputText;
 	var playfieldStepper:FlxUINumericStepper;
-	var targetLaneStepper:FlxUINumericStepper;
+	var targetLaneInputText:FlxInputText;
 	var modifierDropDown:FlxUIDropDownMenu;
 	var mods:Array<String> = [];
 	var subMods:Array<String> = [""];
@@ -1509,7 +1540,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				modTypeInputText.text = currentModifier[MOD_TYPE];
 				playfieldStepper.value = currentModifier[MOD_PF];
 				if (currentModifier[MOD_LANE] != null)
-					targetLaneStepper.value = currentModifier[MOD_LANE];
+					targetLaneInputText.text = Std.string(currentModifier[MOD_LANE]);
 			}
 		});
 
@@ -1528,7 +1559,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						modClassInputText.text,
 						modTypeInputText.text,
 						playfieldStepper.value,
-						targetLaneStepper.value
+						targetLaneInputText.text
 					];
 					alreadyExists = true;
 				}
@@ -1539,7 +1570,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 					modClassInputText.text,
 					modTypeInputText.text,
 					playfieldStepper.value,
-					targetLaneStepper.value
+					targetLaneInputText.text
 				]);
 			}
 			dirtyUpdateModifiers = true;
@@ -1564,7 +1595,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		explainText = new FlxText(modifierDropDown.x + 200, modifierDropDown.y + 200, 160, '', 8);
 		modTypeInputText = new FlxInputText(modifierDropDown.x + 700, modifierDropDown.y, 160, '', 8);
 		playfieldStepper = new FlxUINumericStepper(modifierDropDown.x + 900, modifierDropDown.y, 1, -1, -1, 100, 0);
-		targetLaneStepper = new FlxUINumericStepper(modifierDropDown.x + 900, modifierDropDown.y + 300, 1, -1, -1, 100, 0);
+		targetLaneInputText = new FlxInputText(modifierDropDown.x + 800,modifierDropDown.y + 300,150,"",8);
+
+		textBlockers.push(targetLaneInputText);
 
 		textBlockers.push(modNameInputText);
 		textBlockers.push(modClassInputText);
@@ -1602,7 +1635,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		tab_group.add(explainText);
 		tab_group.add(modTypeInputText);
 		tab_group.add(playfieldStepper);
-		tab_group.add(targetLaneStepper);
+		tab_group.add(targetLaneInputText);
 
 		tab_group.add(refreshModifiers);
 		tab_group.add(saveModifier);
@@ -1613,7 +1646,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		tab_group.add(makeLabel(explainText, 0, -15, "Modifier Explaination:"));
 		tab_group.add(makeLabel(modTypeInputText, 0, -15, "Modifier Type"));
 		tab_group.add(makeLabel(playfieldStepper, 0, -15, "Playfield (-1 = all)"));
-		tab_group.add(makeLabel(targetLaneStepper, 0, -15, "Target Lane (only for Lane mods!)"));
+		tab_group.add(makeLabel(targetLaneInputText, 0, -15, "Target Lane(s)"));
 		tab_group.add(makeLabel(playfieldStepper, 0, 15, "Playfield number starts at 0!"));
 
 		tab_group.add(modifierDropDown);
@@ -2078,13 +2111,18 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			hasUnsavedChanges = true;
 		});
 
-		easeDropDown = new FlxUIDropDownMenu(25, eventEaseInputText.y + 30, FlxUIDropDownMenu.makeStrIdLabelArray(easeList, true), function(ease:String) {
+			easeDropDown = new FlxUIDropDownMenu(25, eventEaseInputText.y + 30, FlxUIDropDownMenu.makeStrIdLabelArray(easeList, true), function(ease:String) {
 			var easeStr = easeList[Std.parseInt(ease)];
 			eventEaseInputText.text = easeStr;
 			eventEaseInputText.onTextChange.dispatch("", ""); // make sure it updates
 			hasUnsavedChanges = true;
+			tweenPreview.ease = CoolUtil.easeFromString(easeStr);
 		});
 		centerXToObject(eventEaseInputText, easeDropDown);
+
+		tweenPreview.x = easeDropDown.x;
+		tweenPreview.y = easeDropDown.y + 75;
+		tweenPreview.ease = CoolUtil.easeFromString(easeList[0]);
 
 		eventModifierDropDown = new FlxUIDropDownMenu(25, 50 + 20, FlxUIDropDownMenu.makeStrIdLabelArray(mods, true), function(mod:String) {
 			var modName = mods[Std.parseInt(mod)];
@@ -2190,6 +2228,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		tab_group.add(makeLabel(eventModInputText, 0, -15, "Event Mod"));
 		tab_group.add(makeLabel(subModDropDown, 0, -15, "Sub Mods"));
 
+
+		addUI(tab_group, "tweenPreview", tweenPreview, 'Ease Preview', 'Graph of the currently selected ease function.');
 		addUI(tab_group, "subModDropDown", subModDropDown, 'Sub Mods', 'Drop down for sub mods on the currently selected modifier, not all mods have them.');
 		addUI(tab_group, "eventModifierDropDown", eventModifierDropDown, 'Stored Modifiers', 'Drop down for stored modifiers.');
 		addUI(tab_group, "eventTypeDropDown", eventTypeDropDown, 'Event Type',
@@ -2325,6 +2365,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	@:allow(modcharting.ModchartUtil)
 	var check_downscroll:FlxUICheckBox;
 
+
+	public var check_lanePaths:FlxUICheckBox;
+
 	public function setupPlayfieldUI() {
 		var tab_group = new FlxUI(null, UI_box);
 		tab_group.name = "Playfields";
@@ -2452,15 +2495,46 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			NoteMovement.getDefaultStrumPosEditor(this);
 		};
 
+		check_lanePaths = new FlxUICheckBox(
+			check_middlescroll.x,
+			check_middlescroll.y + 50,
+			null,
+			null,
+			"Show Lane Paths",
+			100
+		);
+
+		check_lanePaths.checked = false;
+
+		check_lanePaths.callback = function()
+		{
+			if (playfieldRenderer != null)
+			{
+				for (path in playfieldRenderer.lanePaths)
+				{
+					path.visible = check_lanePaths.checked;
+					path.active = check_lanePaths.checked;
+				}
+			}
+		};
+
 		var resetSpeed:FlxButton = new FlxButton(sliderRate.x + 300, sliderRate.y, 'Reset', function() {
 			playbackSpeed = 1.0;
 		});
 
-		var saveJson:FlxUIButton = new FlxUIButton(20, 300, 'Save Modchart', function() {
+		var saveJsonAs:FlxUIButton = new FlxUIButton(20, 300, 'Save Modchart As', function() {
+			saveasModchartJson(this);
+		});
+		addUI(tab_group, "saveJson", saveJsonAs, 'Save Modchart As', 'Saves the modchart to a .json file which can be stored and loaded later.');
+
+		var saveJson:FlxUIButton = new FlxUIButton(saveJsonAs.x + 125,saveJsonAs.y,'Save Modchart',function()
+		{
 			saveModchartJson(this);
 		});
 		addUI(tab_group, "saveJson", saveJson, 'Save Modchart', 'Saves the modchart to a .json file which can be stored and loaded later.');
-		// tab_group.addAsset(saveJson, "saveJson");
+		 check_diff_modchart = new FlxUICheckBox(saveJson.x + 100,saveJson.y,null,null,"Save per difficulty",120);
+		tab_group.add(check_diff_modchart);
+
 		tab_group.add(sliderRate);
 		addUI(tab_group, "resetSpeed", resetSpeed, 'Reset Speed', 'Resets playback speed to 1.');
 		tab_group.add(songSlider);
@@ -2469,6 +2543,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		tab_group.add(check_mute_vocals);
 
 		tab_group.add(check_middlescroll);
+		tab_group.add(check_lanePaths);
 		tab_group.add(check_downscroll);
 		#if (PSYCH && PSYCHVERSION >= "0.7.3") tab_group.add(check_mute_opponent_vocals); #end
 
@@ -2509,7 +2584,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 	public var _file:FileReference;
 
-	public function saveModchartJson(?instance:ModchartMusicBeatState = null):Void {
+	public function saveasModchartJson(?instance:ModchartMusicBeatState = null):Void {
 		if (instance == null)
 			instance = PlayState.instance;
 
@@ -2530,6 +2605,40 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		hasUnsavedChanges = false;
 	}
 
+	public function saveModchartJson(?instance:ModchartMusicBeatState = null):Void
+	{
+		if (instance == null)
+			instance = PlayState.instance;
+
+		#if sys
+		var song:String = PlayState.SONG.song.toLowerCase();
+		var curMod:String = Options.getData("curMod");
+
+		var folder:String = 'mods/$curMod/data/song data/$song/';
+
+		if (!FileSystem.exists(folder))
+			FileSystem.createDirectory(folder);
+
+		var filename:String = "modchart.json";
+
+		if (check_diff_modchart.checked)
+		{
+			var diff:String = PlayState.storyDifficultyStr.toLowerCase();
+			filename = 'modchart-$diff.json';
+		}
+
+		var songpath:String = folder + filename;
+
+		var data:String = Json.stringify(instance.playfieldRenderer.modchart.data, "\t").trim();
+
+		if (data != null && data.length > 0)
+		{
+			File.saveContent(songpath, data);
+			trace("Saved: " + songpath);
+			hasUnsavedChanges = false;
+		}
+		#end
+	}
 	function onSaveComplete(_):Void {
 		_file.removeEventListener(#if desktop openfl.events.Event.SELECT #else openfl.events.Event.COMPLETE #end, onSaveComplete);
 		_file.removeEventListener(openfl.events.Event.CANCEL, onSaveCancel);

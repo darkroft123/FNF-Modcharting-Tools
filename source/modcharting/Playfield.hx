@@ -1,5 +1,6 @@
 package modcharting;
 
+import flixel.FlxG;
 class Playfield
 {
     public var x:Float = 0;

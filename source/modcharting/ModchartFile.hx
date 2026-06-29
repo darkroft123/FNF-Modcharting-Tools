@@ -1,9 +1,7 @@
 package modcharting;
 
 import flixel.math.FlxMath;
-import haxe.Exception;
 import haxe.Json;
-import haxe.format.JsonParser;
 import lime.utils.Assets;
 #if LEATHER
 import states.PlayState;
@@ -34,25 +32,25 @@ typedef ModchartJson = {
 
 class ModchartFile {
 	// used for indexing
-	public static final MOD_NAME = 0; // the modifier name
-	public static final MOD_CLASS = 1; // the class/custom mod it uses
-	public static final MOD_TYPE = 2; // the type, which changes if its for the player, opponent, a specific lane or all
-	public static final MOD_PF = 3; // the playfield that mod uses
-	public static final MOD_LANE = 4; // the lane the mod uses
+	public static inline final MOD_NAME = 0; // the modifier name
+	public static inline final MOD_CLASS = 1; // the class/custom mod it uses
+	public static inline final MOD_TYPE = 2; // the type, which changes if its for the player, opponent, a specific lane or all
+	public static inline final MOD_PF = 3; // the playfield that mod uses
+	public static inline final MOD_LANE = 4; // the lane the mod uses
 
-	public static final EVENT_TYPE = 0; // event type (set or ease)
-	public static final EVENT_DATA = 1; // event data
-	public static final EVENT_REPEAT = 2; // event repeat data
+	public static inline final EVENT_TYPE = 0; // event type (set or ease)
+	public static inline final EVENT_DATA = 1; // event data
+	public static inline final EVENT_REPEAT = 2; // event repeat data
 
-	public static final EVENT_TIME = 0; // event time (in beats)
-	public static final EVENT_SETDATA = 1; // event data (for sets)
-	public static final EVENT_EASETIME = 1; // event ease time
-	public static final EVENT_EASE = 2; // event ease
-	public static final EVENT_EASEDATA = 3; // event data (for eases)
+	public static inline final EVENT_TIME = 0; // event time (in beats)
+	public static inline final EVENT_SETDATA = 1; // event data (for sets)
+	public static inline final EVENT_EASETIME = 1; // event ease time
+	public static inline final EVENT_EASE = 2; // event ease
+	public static inline final EVENT_EASEDATA = 3; // event data (for eases)
 
-	public static final EVENT_REPEATBOOL = 0; // if event should repeat
-	public static final EVENT_REPEATCOUNT = 1; // how many times it repeats
-	public static final EVENT_REPEATBEATGAP = 2; // how many beats in between each repeat
+	public static inline final EVENT_REPEATBOOL = 0; // if event should repeat
+	public static inline final EVENT_REPEATCOUNT = 1; // how many times it repeats
+	public static inline final EVENT_REPEATBEATGAP = 2; // how many beats in between each repeat
 
 	public var data:ModchartJson = null;
 	public var renderer:PlayfieldRenderer;
@@ -260,8 +258,7 @@ class ModchartFile {
         var json:ModchartJson = null;
 		try {
 			if (rawJson != null) {
-				for (i in 0...difficulty.length)
-					json = cast Json.parse(rawJson);
+				json = cast Json.parse(rawJson);
 				trace('loaded json');
 				trace(folderShit);
 
@@ -297,18 +294,58 @@ class ModchartFile {
 		data.playfields = 1;
 	}
 
-	public function loadModifiers() {
+	public function loadModifiers()
+	{
 		if (data == null || renderer == null)
 			return;
+
 		renderer.modifierTable.clear();
-		for (i in data.modifiers) {
-			ModchartFuncs.startMod(i[MOD_NAME], i[MOD_CLASS], i[MOD_TYPE], Std.parseInt(i[MOD_PF]), renderer.instance);
+
+		for (i in data.modifiers)
+		{
+			ModchartFuncs.startMod(
+				i[MOD_NAME],
+				i[MOD_CLASS],
+				i[MOD_TYPE],
+				Std.parseInt(i[MOD_PF]),
+				renderer.instance
+			);
+
 			if (i[MOD_LANE] != null)
-				ModchartFuncs.setModTargetLane(i[MOD_NAME], i[MOD_LANE], renderer.instance);
+			{
+				var laneData:Dynamic = i[MOD_LANE];
+
+				if (Std.isOfType(laneData, String) && Std.string(laneData).indexOf(",") != -1)
+				{
+					var lanes:Array<Int> = [];
+
+					for (laneStr in Std.string(laneData).split(","))
+					{
+						var lane = Std.parseInt(StringTools.trim(laneStr));
+
+						if (!Math.isNaN(lane))
+							lanes.push(lane);
+					}
+
+					ModchartFuncs.setModTargetLane(
+						i[MOD_NAME],
+						lanes,
+						renderer.instance
+					);
+				}
+				else
+				{
+					ModchartFuncs.setModTargetLane(
+						i[MOD_NAME],
+						laneData,
+						renderer.instance
+					);
+				}
+			}
 		}
+
 		renderer.modifierTable.reconstructTable();
 	}
-
 	public function loadPlayfields() {
 		if (data == null || renderer == null)
 			return;

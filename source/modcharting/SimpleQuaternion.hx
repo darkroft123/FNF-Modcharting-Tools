@@ -14,6 +14,8 @@ typedef Quaternion =
 //me whenthe
 class SimpleQuaternion
 {
+    static var _cachedQ:Quaternion = {x: 0, y: 0, z: 0, w: 0};
+
     //no more gimbal lock fuck you
     public static function fromEuler(roll:Float, pitch:Float, yaw:Float) : Quaternion
     {
@@ -25,12 +27,11 @@ class SimpleQuaternion
         var cy = Math.cos(yaw * FlxAngle.TO_RAD);
         var sy = Math.sin(yaw * FlxAngle.TO_RAD);
     
-        var q:Quaternion = {x: 0, y: 0, z: 0, w:0 };
-        q.w = cr * cp * cy + sr * sp * sy;
-        q.x = sr * cp * cy - cr * sp * sy;
-        q.y = cr * sp * cy + sr * cp * sy;
-        q.z = cr * cp * sy - sr * sp * cy;
-        return q;
+        _cachedQ.w = cr * cp * cy + sr * sp * sy;
+        _cachedQ.x = sr * cp * cy - cr * sp * sy;
+        _cachedQ.y = cr * sp * cy + sr * cp * sy;
+        _cachedQ.z = cr * cp * sy - sr * sp * cy;
+        return _cachedQ;
     }
     public static function transformVector(v:Vector3D, q:Quaternion) : Vector3D
     {
@@ -50,9 +51,9 @@ class SimpleQuaternion
     }
     public static function conjugate(q:Quaternion) : Quaternion
     {
+        q.x = -q.x;
         q.y = -q.y;
         q.z = -q.z;
-        q.w = -q.w;
         return q;
     }
     public static function multiply(q1:Quaternion, q2:Quaternion) : Quaternion

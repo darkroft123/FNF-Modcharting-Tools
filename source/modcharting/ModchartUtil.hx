@@ -129,6 +129,9 @@ class ModchartUtil {
 	public static var zFar:Float = 100;
 	public static var defaultFOV:Float = 90;
 
+	static var _cachedVec3D:Vector3D = new Vector3D();
+	static var _cachedPerspVec3D:Vector3D = new Vector3D();
+
 	/**
 		Converts a Vector3D to its in world coordinates using perspective math
 	**/
@@ -185,7 +188,7 @@ class ModchartUtil {
 		@param	radius Distance to center.
 	**/
 	public static function getCartesianCoords3D(theta:Float, phi:Float, radius:Float):Vector3D {
-		var pos:Vector3D = new Vector3D();
+		var pos = _cachedVec3D;
 		var rad = FlxAngle.TO_RAD;
 		pos.x = Math.cos(theta * rad) * Math.sin(phi * rad);
 		pos.y = Math.cos(phi * rad);
@@ -277,15 +280,14 @@ class ModchartUtil {
 
 	public static function getTimeFromBeat(beat:Float) {
 		var totalTime:Float = 0;
-		var curBpm = Conductor.bpm;
-		if (PlayState.SONG != null)
-			curBpm = PlayState.SONG.bpm;
+		var curBpm = PlayState.SONG != null ? PlayState.SONG.bpm : Conductor.bpm;
+		var bpmMap = Conductor.bpmChangeMap;
+		var bpmIndex:Int = 0;
+		var maxBpm = bpmMap.length;
 		for (i in 0...Math.floor(beat)) {
-			if (Conductor.bpmChangeMap.length > 0) {
-				for (j in 0...Conductor.bpmChangeMap.length) {
-					if (totalTime >= Conductor.bpmChangeMap[j].songTime)
-						curBpm = Conductor.bpmChangeMap[j].bpm;
-				}
+			while (bpmIndex < maxBpm && totalTime >= bpmMap[bpmIndex].songTime) {
+				curBpm = bpmMap[bpmIndex].bpm;
+				bpmIndex++;
 			}
 			totalTime += (60 / curBpm) * 1000;
 		}

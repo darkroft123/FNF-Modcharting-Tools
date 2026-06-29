@@ -107,8 +107,9 @@ class ModTable
         if (table[pf] != null && table[pf][lane] != null)
         {
             var modList:Array<Modifier> = table[pf][lane];
-            for (mod in modList)
+            for (mod in modList) {
                 mod.getStrumPath(noteData, lane, pf);
+            }
         }
     }
     public function applyNoteMods(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) : Void
@@ -116,8 +117,9 @@ class ModTable
         if (table[pf] != null && table[pf][lane] != null)
         {
             var modList:Array<Modifier> = table[pf][lane];
-            for (mod in modList)
+            for (mod in modList) {
                 mod.getNotePath(noteData, lane, curPos, pf);
+            }
         }
     }
     public function applyNoteDistMods(noteDist:Float, lane:Int, pf:Int) : Float
