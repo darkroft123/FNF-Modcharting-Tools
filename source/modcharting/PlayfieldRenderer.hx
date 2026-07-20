@@ -128,18 +128,20 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		if (alpha <= 0.001 || !visible)
 			return;
 
+		isDownscroll = ModchartUtil.getDownscroll(instance);
+		isMiddlescroll = ModchartUtil.getMiddlescroll(instance);
+
 		strumGroup.cameras = this.cameras;
 		notes.cameras = this.cameras;
 
+		var positions = getNotePositions();
 		try {
-			var positions = getNotePositions();
 			drawStuff(positions);
-			for (data in positions)
-				NotePositionData.recycle(data);
 		} catch (e) {
-			trace(e);
+			trace(e + '\n' + e.stack);
 		}
-		// draw notes to screen
+		for (data in positions)
+			NotePositionData.recycle(data);
 	}
 
 	public function addDataToStrum(strumData:NotePositionData, strum:StrumNoteType) {
@@ -182,8 +184,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		daNote.skew.x = noteData.skewX;
 		daNote.skew.y = noteData.skewY;
 		daNote.setColorTransform(1, 1, 1, noteData.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
-			cast(cameras[0], PerspectiveCamera).angleX = noteData.fieldAngle.x;
-		cast(cameras[0], PerspectiveCamera).angleY = noteData.fieldAngle.y;
 	}
 
 	public function createDataFromNote(noteIndex:Int, playfieldIndex:Int, curPos:Float, noteDist:Float, incomingAngle:Array<Float>) {
@@ -230,6 +230,12 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				var strumData = getDataForStrum(i, pf);
 				notePositions.push(strumData);
 			}
+			for (modName => mod in modifierTable.modifiers) {
+				if (mod.currentValue != mod.baseValue) {
+					var extra = mod.gatherExtraStrumData(pf);
+					if (extra != null) notePositions = notePositions.concat(extra);
+				}
+			}
 			for (i in 0...notes.members.length) {
 				var songSpeed = notes.members[i].speed;
 
@@ -272,6 +278,12 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 				// add position data to list
 				notePositions.push(noteData);
+			}
+			for (modName => mod in modifierTable.modifiers) {
+				if (mod.currentValue != mod.baseValue) {
+					var extra = mod.gatherExtraNoteData(pf);
+					if (extra != null) notePositions = notePositions.concat(extra);
+				}
 			}
 		}
 		// sort by z before drawing
@@ -388,13 +400,15 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			timeToNextSustain *= -1; // weird shit that fixes upscroll lol
 		// timeToNextSustain = -ModchartUtil.getFakeCrochet()/4; //weird shit that fixes upscroll lol
 
+		var nextHalfNotePos:NotePositionData;
+		var nextNotePos:NotePositionData;
 		#if (PSYCH && !(PSYCHVERSION >= "0.7"))
-		var nextHalfNotePos = getSustainPoint(noteData, timeToNextSustain * 0.5);
-		var nextNotePos = getSustainPoint(noteData, timeToNextSustain);
+		nextHalfNotePos = getSustainPoint(noteData, timeToNextSustain * 0.5);
+		nextNotePos = getSustainPoint(noteData, timeToNextSustain);
 		#else
-		var nextHalfNotePos = isDownscroll ? getSustainPoint(noteData,
+		nextHalfNotePos = isDownscroll ? getSustainPoint(noteData,
 			timeToNextSustain * 0.458) : getSustainPoint(noteData, timeToNextSustain * 0.548);
-		var nextNotePos = isDownscroll ? getSustainPoint(noteData,
+		nextNotePos = isDownscroll ? getSustainPoint(noteData,
 			timeToNextSustain + 2.2) : getSustainPoint(noteData, timeToNextSustain - 2.2);
 		#end
 
@@ -414,10 +428,13 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				flipGraphic = true;
 		}
 		// render that shit
-		daNote.mesh.constructVertices(noteData, thisNotePos, nextHalfNotePos, nextNotePos, flipGraphic, reverseClip);
-
-		daNote.mesh.cameras = this.cameras;
-		daNote.mesh.draw();
+		try {
+			daNote.mesh.constructVertices(noteData, thisNotePos, nextHalfNotePos, nextNotePos, flipGraphic, reverseClip);
+			daNote.mesh.cameras = this.cameras;
+			daNote.mesh.draw();
+		} catch (e) {
+			trace(e);
+		}
 
 		NotePositionData.recycle(nextHalfNotePos);
 		NotePositionData.recycle(nextNotePos);

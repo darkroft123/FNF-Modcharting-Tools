@@ -154,7 +154,8 @@ class LanePathRenderer extends FlxSpriteGroup {
 			// alpha más estable (evita flicker en perspectiva extrema)
 			var dist = FlxMath.vectorLength(dx, dy);
 			var depthAlpha = 1 / (1 + dist * 0.002);
-			seg.alpha = FlxMath.bound(depthAlpha, 0.25, 1);
+			var pfAlpha = (renderer.playfields != null && playfield < renderer.playfields.length) ? renderer.playfields[playfield].alpha : 1;
+			seg.alpha = FlxMath.bound(depthAlpha, 0.25, 1) * pfAlpha;
 
 			var midX = (p1.x + p2.x) / 2;
 			var midY = (p1.y + p2.y) / 2;

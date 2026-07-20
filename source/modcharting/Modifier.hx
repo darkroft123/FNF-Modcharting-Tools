@@ -58,6 +58,7 @@ class Modifier {
 	public var type:ModifierType = ALL;
 	public var playfield:Int = -1;
 	public var targetLane:Int = -1;
+	public var targetLanes:Array<Int> = null;
 	public var instance:ModchartMusicBeatState = null;
 	public var renderer:PlayfieldRenderer = null;
 
@@ -127,6 +128,10 @@ class Modifier {
 
 	public dynamic function setupSubValues() {}
 
+	public dynamic function gatherExtraStrumData(pf:Int):Array<NotePositionData> { return null; }
+
+	public dynamic function gatherExtraNoteData(pf:Int):Array<NotePositionData> { return null; }
+
 	public inline function checkPlayField(pf:Int):Bool // returns true if should display on current playfield
 	{
 		return (playfield == -1) || (pf == playfield);
@@ -136,6 +141,8 @@ class Modifier {
 	{
 		switch (type) {
 			case LANESPECIFIC:
+				if (targetLanes != null && targetLanes.length > 0)
+					return targetLanes.indexOf(lane) != -1;
 				return lane == targetLane;
 			case PLAYERONLY:
 				return lane >= NoteMovement.keyCount;
@@ -173,6 +180,7 @@ class Modifier {
 		mod.baseValue = this.currentValue;
 		mod.subValues = this.subValues;
 		mod.targetLane = this.targetLane;
+		mod.targetLanes = this.targetLanes;
 		mod.instance = this.instance;
 		mod.renderer = this.renderer;
 		return mod;
@@ -636,30 +644,6 @@ class YawModifier extends Modifier {
 	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
 		noteData.angleY += currentValue;
 	}
-}
-
-class FieldPitchModifier extends Modifier {
-	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
-		noteData.fieldAngle.x += currentValue;
-	}
-
-	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {}
-}
-
-class FieldYawModifier extends Modifier {
-	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
-		noteData.fieldAngle.y += currentValue;
-	}
-
-	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {}
-}
-
-class FieldRollModifier extends Modifier {
-	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
-		noteData.fieldAngle.z += currentValue;
-	}
-
-	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {}
 }
 
 class ConfusionModifier extends Modifier {
@@ -2239,5 +2223,201 @@ class SpiralYModifier extends SpiralXModifier {
 class SpiralZModifier extends SpiralXModifier {
 	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
 		noteData.z += spiral(noteData, lane, curPos, pf, Math.sin);
+	}
+}
+
+class RingModifier extends Modifier {
+	override function setupSubValues() {
+		subValues.set('speed', new ModifierSubValue(1.0));
+		subValues.set('amplitude', new ModifierSubValue(100.0));
+	}
+
+	function ringMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		var phase = (lane / NoteMovement.totalKeyCount) * Math.PI * 2;
+		var angle = phase + (Conductor.songPosition * 0.001 * subValues.get('speed').value);
+		var amp = subValues.get('amplitude').value;
+
+		noteData.x += Math.cos(angle) * amp * currentValue;
+		noteData.z += Math.sin(angle) * amp * currentValue;
+	}
+
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		ringMath(noteData, lane, curPos, pf);
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		ringMath(noteData, lane, 0, pf);
+	}
+}
+
+class TrailModifier extends Modifier {
+	var skipCounter:Int = 0;
+
+	override function setupSubValues() {
+		subValues.set('segments', new ModifierSubValue(4.0));
+		subValues.set('spacing', new ModifierSubValue(15.0));
+		subValues.set('speed', new ModifierSubValue(1.0));
+		subValues.set('alpha', new ModifierSubValue(0.6));
+	}
+
+	override function gatherExtraNoteData(pf:Int):Array<NotePositionData> {
+		if (currentValue == baseValue || renderer == null) return null;
+
+		skipCounter++;
+		if (skipCounter % 3 != 0) return null;
+
+		var extra:Array<NotePositionData> = [];
+		var segCount = Std.int(Math.max(subValues.get('segments').value, 1));
+		var spacing = subValues.get('spacing').value;
+		var alphaStart = subValues.get('alpha').value;
+		var maxDist = 2000.0;
+
+		for (i in 0...renderer.notes.members.length) {
+			var daNote = renderer.notes.members[i];
+			if (daNote == null) continue;
+			var lane = renderer.getLane(i);
+			if (!checkLane(lane) || !checkPlayField(pf)) continue;
+
+			var curPos = renderer.getNoteCurPos(i);
+			curPos = renderer.modifierTable.applyCurPosMods(lane, curPos, pf);
+
+			if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && curPos >= 0 && daNote.isSustainNote)
+				curPos = 0;
+
+			if (Math.abs(curPos) > maxDist) continue;
+
+			var noteDist = renderer.getNoteDist(i);
+			noteDist = renderer.modifierTable.applyNoteDistMods(noteDist, lane, pf);
+
+			var incomingAngle = renderer.modifierTable.applyIncomingAngleMods(lane, curPos, pf);
+			if (noteDist < 0) incomingAngle[0] += 180;
+
+			var origX = daNote.x;
+			var origY = daNote.y;
+
+			for (s in 0...segCount) {
+				var trailCurPos = curPos - spacing * (s + 1) * currentValue;
+				NoteMovement.setNotePath(daNote, lane, daNote.speed, trailCurPos, noteDist, incomingAngle[0], incomingAngle[1]);
+
+				var trailData = renderer.createDataFromNote(i, pf, trailCurPos, noteDist, incomingAngle);
+				renderer.modifierTable.applyNoteMods(trailData, lane, trailCurPos, pf);
+				trailData.alpha *= alphaStart * (1 - (s / segCount));
+				extra.push(trailData);
+			}
+
+			daNote.x = origX;
+			daNote.y = origY;
+		}
+		return extra;
+	}
+}
+
+class WormModifier extends Modifier {
+	override function setupSubValues() {
+		subValues.set('spacing', new ModifierSubValue(230.0));
+		subValues.set('count', new ModifierSubValue(20.0));
+		subValues.set('speed', new ModifierSubValue(1.0));
+	}
+
+	function getRowLayout():{rowWidth:Float, fullRows:Int, remaining:Int, perRow:Int} {
+		var ghostCount = Std.int(Math.max(subValues.get('count').value, 1));
+		var spacing = subValues.get('spacing').value;
+		var perRow = NoteMovement.totalKeyCount;
+		var minX = NoteMovement.defaultStrumX[0];
+		var maxX = NoteMovement.defaultStrumX[0];
+		for (lane in 0...perRow) {
+			var lx = NoteMovement.defaultStrumX[lane];
+			if (lx < minX) minX = lx;
+			if (lx > maxX) maxX = lx;
+		}
+		return {
+			rowWidth: maxX + spacing - minX,
+			fullRows: Std.int(ghostCount / perRow),
+			remaining: ghostCount % perRow,
+			perRow: perRow
+		};
+	}
+
+	override function gatherExtraStrumData(pf:Int):Array<NotePositionData> {
+		if (currentValue == baseValue || renderer == null) return null;
+
+		var layout = getRowLayout();
+		var scroll = Conductor.songPosition * 0.001 * subValues.get('speed').value;
+		var extra:Array<NotePositionData> = [];
+
+		for (row in 0...layout.fullRows) {
+			var rowOffset = layout.rowWidth * (row + 1) + scroll;
+			for (lane in 0...layout.perRow) {
+				if (!checkLane(lane) || !checkPlayField(pf)) continue;
+				extra.push(makeRowStrum(lane, pf, rowOffset));
+			}
+		}
+		if (layout.remaining > 0) {
+			var rowOffset = layout.rowWidth * (layout.fullRows + 1) + scroll;
+			for (lane in 0...layout.remaining) {
+				if (!checkLane(lane) || !checkPlayField(pf)) continue;
+				extra.push(makeRowStrum(lane, pf, rowOffset));
+			}
+		}
+		return extra;
+	}
+
+	function makeRowStrum(lane:Int, pf:Int, offset:Float):NotePositionData {
+		var scale = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
+		var skewX = NoteMovement.defaultSkewX.length > lane ? NoteMovement.defaultSkewX[lane] : 0;
+		var skewY = NoteMovement.defaultSkewY.length > lane ? NoteMovement.defaultSkewY[lane] : 0;
+		var strumData = NotePositionData.get();
+		strumData.setupStrum(NoteMovement.defaultStrumX[lane], NoteMovement.defaultStrumY[lane], 0, lane, scale, scale, skewX, skewY, pf);
+		if (pf < renderer.playfields.length)
+			renderer.playfields[pf].applyOffsets(strumData);
+		renderer.modifierTable.applyStrumMods(strumData, lane, pf);
+		strumData.x += offset;
+		return strumData;
+	}
+
+	override function gatherExtraNoteData(pf:Int):Array<NotePositionData> {
+		if (currentValue == baseValue || renderer == null) return null;
+
+		var layout = getRowLayout();
+		var scroll = Conductor.songPosition * 0.001 * subValues.get('speed').value;
+
+		var extra:Array<NotePositionData> = [];
+		var maxDist = 2000.0;
+
+		for (i in 0...renderer.notes.members.length) {
+			var daNote = renderer.notes.members[i];
+			if (daNote == null) continue;
+			var lane = renderer.getLane(i);
+			if (!checkLane(lane) || !checkPlayField(pf)) continue;
+
+			var curPos = renderer.getNoteCurPos(i);
+			curPos = renderer.modifierTable.applyCurPosMods(lane, curPos, pf);
+
+			if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && curPos >= 0 && daNote.isSustainNote)
+				curPos = 0;
+
+			if (Math.abs(curPos) > maxDist) continue;
+
+			var noteDist = renderer.getNoteDist(i);
+			noteDist = renderer.modifierTable.applyNoteDistMods(noteDist, lane, pf);
+
+			var incomingAngle = renderer.modifierTable.applyIncomingAngleMods(lane, curPos, pf);
+			if (noteDist < 0) incomingAngle[0] += 180;
+
+			for (row in 0...layout.fullRows) {
+				extra.push(makeRowNote(i, pf, curPos, noteDist, incomingAngle, layout.rowWidth * (row + 1) + scroll));
+			}
+			if (layout.remaining > 0 && lane < layout.remaining) {
+				extra.push(makeRowNote(i, pf, curPos, noteDist, incomingAngle, layout.rowWidth * (layout.fullRows + 1) + scroll));
+			}
+		}
+		return extra;
+	}
+
+	function makeRowNote(noteIndex:Int, pf:Int, curPos:Float, noteDist:Float, incomingAngle:Array<Float>, offset:Float):NotePositionData {
+		var noteData = renderer.createDataFromNote(noteIndex, pf, curPos, noteDist, incomingAngle);
+		renderer.modifierTable.applyNoteMods(noteData, renderer.getLane(noteIndex), curPos, pf);
+		noteData.x += offset;
+		return noteData;
 	}
 }

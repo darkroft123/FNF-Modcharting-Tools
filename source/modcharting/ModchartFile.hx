@@ -374,12 +374,53 @@ class ModchartFile {
 	}
 
 	public function addEvent(i:Array<Dynamic>, ?beatOffset:Float = 0) {
+		var rawTime:Dynamic = i[EVENT_DATA][EVENT_TIME];
+		var times:Array<Float> = [];
+
+		if (Std.isOfType(rawTime, String)) {
+			var timeStr:String = rawTime;
+			if (timeStr.indexOf(",") != -1) {
+				var timeParts = timeStr.split(",");
+				for (t in timeParts) {
+					var parsed = Std.parseFloat(t.trim());
+					if (!Math.isNaN(parsed))
+						times.push(parsed + beatOffset);
+				}
+			} else {
+				var parsed = Std.parseFloat(timeStr);
+				if (!Math.isNaN(parsed))
+					times.push(parsed + beatOffset);
+			}
+		} else {
+			var parsed:Float = rawTime;
+			if (!Math.isNaN(parsed))
+				times.push(parsed + beatOffset);
+		}
+
+		if (times.length == 0) times.push(0);
+
 		switch (i[EVENT_TYPE]) {
 			case "ease":
-				ModchartFuncs.ease(Std.parseFloat(i[EVENT_DATA][EVENT_TIME]) + beatOffset, Std.parseFloat(i[EVENT_DATA][EVENT_EASETIME]),
-					i[EVENT_DATA][EVENT_EASE], i[EVENT_DATA][EVENT_EASEDATA], renderer.instance);
+				var fullArgsStr:String = i[EVENT_DATA][EVENT_EASEDATA];
+				var args = fullArgsStr.trim().replace(' ', '').split(',');
+				var pairCount = Math.floor(args.length / 2);
+				var easeTime:Float = Std.parseFloat(i[EVENT_DATA][EVENT_EASETIME]);
+				if (Math.isNaN(easeTime)) easeTime = 1;
+				for (p in 0...pairCount) {
+					var pairTime = times.length > p ? times[p] : times[times.length - 1];
+					var pairData = args[p * 2] + "," + args[p * 2 + 1];
+					ModchartFuncs.ease(pairTime, easeTime,
+						i[EVENT_DATA][EVENT_EASE], pairData, renderer.instance);
+				}
 			case "set":
-				ModchartFuncs.set(Std.parseFloat(i[EVENT_DATA][EVENT_TIME]) + beatOffset, i[EVENT_DATA][EVENT_SETDATA], renderer.instance);
+				var fullArgsStr:String = i[EVENT_DATA][EVENT_SETDATA];
+				var args = fullArgsStr.trim().replace(' ', '').split(',');
+				var pairCount = Math.floor(args.length / 2);
+				for (p in 0...pairCount) {
+					var pairTime = times.length > p ? times[p] : times[times.length - 1];
+					var pairData = args[p * 2] + "," + args[p * 2 + 1];
+					ModchartFuncs.set(pairTime, pairData, renderer.instance);
+				}
 			case "hscript":
 				// maybe just run some code???
 		}

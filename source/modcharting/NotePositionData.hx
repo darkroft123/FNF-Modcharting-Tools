@@ -2,7 +2,6 @@ package modcharting;
 
 import flixel.util.FlxDestroyUtil.IFlxDestroyable;
 import flixel.util.FlxPool;
-import math.FlxPoint3D;
 class NotePositionData implements IFlxDestroyable {
 
 	static var pool:FlxPool<NotePositionData> = new FlxPool(NotePositionData.new);
@@ -41,17 +40,9 @@ class NotePositionData implements IFlxDestroyable {
 	public var greenOffset:Float;
 	public var blueOffset:Float;
 
-	public var fieldAngle:FlxPoint3D;
+	public function new() {}
 
-	public inline function new() {}
-
-	public inline function destroy() {
-		if (fieldAngle != null) {
-			fieldAngle.put();
-			fieldAngle = null;
-		}
-	}
-	
+	public function destroy() {}
 
 	public inline static function get():NotePositionData {
 		return pool.get();
@@ -80,11 +71,6 @@ class NotePositionData implements IFlxDestroyable {
 		this.angleX = 0;
 		this.angleY = 0;
 		this.angleZ = 0;
-
-		if (this.fieldAngle == null)
-			this.fieldAngle = FlxPoint3D.get();
-		else
-			this.fieldAngle.set(0, 0, 0);
 
 		this.alpha = 1;
 
@@ -140,10 +126,6 @@ class NotePositionData implements IFlxDestroyable {
 		this.angleZ = 0;
 
 		this.alpha = alpha;
-		if (this.fieldAngle == null)
-			this.fieldAngle = FlxPoint3D.get();
-		else
-			this.fieldAngle.set(0, 0, 0);
 		this.scaleX = scaleX;
 		this.scaleY = scaleY;
 

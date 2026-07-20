@@ -287,12 +287,21 @@ class ModchartFuncs
 
             if (Std.isOfType(value, Array))
             {
-                mod.targetLane = Std.int((cast value:Array<Dynamic>)[0]);
+                var arr:Array<Dynamic> = cast value;
+                if (arr.length == 1) {
+                    mod.targetLane = Std.int(arr[0]);
+                    mod.targetLanes = null;
+                } else {
+                    mod.targetLanes = [for (v in arr) Std.int(v)];
+                    mod.targetLane = Std.int(arr[0]);
+                }
             }
             else
             {
                 mod.targetLane = Std.int(value);
+                mod.targetLanes = null;
             }
+            instance.playfieldRenderer.modifierTable.reconstructTable();
         }
     }
     public static function setModPlayfield(name:String, value:Int, ?instance:ModchartMusicBeatState = null)

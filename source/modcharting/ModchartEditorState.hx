@@ -23,6 +23,7 @@ import flixel.util.FlxColor;
 import flixel.math.FlxMath;
 import flixel.FlxSprite;
 import flixel.util.FlxSort;
+import flixel.util.FlxTimer;
 import utilities.Options;
 #if (flixel < "5.3.0")
 import flixel.system.FlxSound;
@@ -88,7 +89,16 @@ class ModchartEditorEvent extends FlxSprite {
 	}
 
 	public inline function getBeatTime():Float {
-		return data[ModchartFile.EVENT_DATA][ModchartFile.EVENT_TIME];
+		var t:Dynamic = data[ModchartFile.EVENT_DATA][ModchartFile.EVENT_TIME];
+		if (Std.isOfType(t, String)) {
+			var tStr:String = t;
+			if (tStr.indexOf(",") != -1) {
+				var parts = tStr.split(",");
+				return Std.parseFloat(parts[0].trim());
+			}
+			return Std.parseFloat(tStr);
+		}
+		return t;
 	}
 	#end
 }
@@ -200,10 +210,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		SkewModifier,
 		SkewXModifier,
 		SkewYModifier,
-		// Field modifiers
-		FieldPitchModifier,
-		FieldYawModifier,
-		FieldRollModifier,
 		// Modifiers with curpos math!!!
 		// Drunk Modifiers
 		DrunkXModifier,
@@ -290,6 +296,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		SpiralXModifier,
 		SpiralYModifier,
 		SpiralZModifier,
+		RingModifier,
+		TrailModifier,
+		WormModifier,
 		// Target Modifiers
 		RotateModifier,
 		StrumLineRotateModifier,
@@ -378,7 +387,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 	public var camHUD:FlxCamera;
 	public var camGame:FlxCamera;
-	public var camNotes:PerspectiveCamera;
+	public var camNotes:FlxCamera;
 	public var notes:FlxTypedGroup<Note>;
 
 	public var strumLine:FlxSprite;
@@ -432,6 +441,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	public var tweenPreview:TweenGraph = new TweenGraph();
 
 	public var check_diff_modchart:FlxUICheckBox;
+	public var check_autoSave:FlxUICheckBox;
+	var autoSaveTimer:FlxTimer;
 
 	override public function new() {
 		super();
@@ -463,7 +474,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		FlxG.cameras.setDefaultDrawTarget(camGame, true);
 		#end
 
-		camNotes = new PerspectiveCamera();
+		camNotes = new FlxCamera();
 		camNotes.bgColor.alpha = 0;
 		FlxG.cameras.add(camNotes, false);
 
@@ -552,18 +563,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		playfieldRenderer.cameras = [camNotes];
 		playfieldRenderer.inEditor = true;
 		
-
-		for (lane in 0...NoteMovement.totalKeyCount)
-		{
-			var path = new LanePathRenderer(playfieldRenderer, lane);
-
-			path.cameras = [camNotes];
-			path.visible = true;
-
-			playfieldRenderer.lanePaths.push(path);
-
-			add(path);
-		}
+		regenerateLanePaths();
 		add(playfieldRenderer);
 
 		// strumLineNotes.cameras = [camHUD];
@@ -648,6 +648,13 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		setupEventUI();
 		setupPlayfieldUI();
 
+		autoSaveTimer = new FlxTimer().start(300, function(tmr) {
+			if (check_autoSave.checked) {
+				saveModchartJson(this);
+				showAutoSaveNotification();
+			}
+		}, 0);
+
 		var hideNotes:FlxButton = new FlxButton(0, FlxG.height, 'Show/Hide Notes', function() {
 			// camHUD.visible = !camHUD.visible;
 			playfieldRenderer.visible = !playfieldRenderer.visible;
@@ -671,6 +678,12 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	#if (PSYCH && PSYCHVERSION >= "0.7.1")
 	override public function destroy() {
 		ClientPrefs.data.cacheOnGPU = backupGpu;
+		if (autoSaveTimer != null) autoSaveTimer.cancel();
+		super.destroy();
+	}
+	#else
+	override public function destroy() {
+		if (autoSaveTimer != null) autoSaveTimer.cancel();
 		super.destroy();
 	}
 	#end
@@ -993,6 +1006,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		if (playfieldRenderer.modchart.data.playfields != playfieldCountStepper.value) {
 			playfieldRenderer.modchart.data.playfields = Std.int(playfieldCountStepper.value);
 			playfieldRenderer.modchart.loadPlayfields();
+			regenerateLanePaths();
 		}
 
 		if (FlxG.keys.justPressed.ESCAPE) {
@@ -1065,6 +1079,23 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		}
 
 		activeModifiersText.text = leText;
+	}
+
+	function regenerateLanePaths() {
+		for (path in playfieldRenderer.lanePaths) {
+			remove(path);
+			path.destroy();
+		}
+		playfieldRenderer.lanePaths = [];
+		for (pf in 0...playfieldRenderer.playfields.length) {
+			for (lane in 0...NoteMovement.totalKeyCount) {
+				var path = new LanePathRenderer(playfieldRenderer, lane, pf);
+				path.cameras = [camNotes];
+				path.visible = true;
+				playfieldRenderer.lanePaths.push(path);
+				add(path);
+			}
+		}
 	}
 
 	function addNewEvent(time:Float) {
@@ -1868,6 +1899,12 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				return "Makes notes move in a spiral (Y axis).  Best combined with reverse 0.5 and flip 0.5.";
 			case "SpiralZModifier":
 				return "Makes notes move in a spiral (Z axis).  Best combined with reverse 0.5 and flip 0.5.";
+			case "RingModifier":
+				return "Makes notes orbit in a 3D ring/hoop shape. SubMods: speed (rotation speed), amplitude (ring radius).";
+			case "TrailModifier":
+				return "Creates fading ghost trails behind each note as it scrolls. SubMods: segments (ghost count), spacing (distance between ghosts), speed, alpha (starting opacity).";
+			case "WormModifier":
+				return "Filas completas de strums fantasma que se extienden a la derecha. SubMods: spacing (separación entre filas), count (total de copias), speed (velocidad de scroll).";
 			case "SawtoothModifier":
 				return "Makes notes move in a sawtooth.";
 			case "DigitalModifier":
@@ -1989,7 +2026,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		return data;
 	}
 
-	public var eventTimeStepper:FlxUINumericStepper;
+
+
 	public var eventModInputText:FlxInputText;
 	public var eventValueInputText:FlxInputText;
 	public var eventDataInputText:FlxInputText;
@@ -1997,6 +2035,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	public var eventTypeDropDown:FlxUIDropDownMenu;
 	public var eventEaseInputText:FlxInputText;
 	public var eventTimeInputText:FlxInputText;
+	public var eventTimeStepper:FlxUINumericStepper;
 	public var selectedEventDataStepper:FlxUINumericStepper;
 	public var repeatCheckbox:FlxUICheckBox;
 	public var repeatBeatGapStepper:FlxUINumericStepper;
@@ -2009,8 +2048,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	public function setupEventUI() {
 		var tab_group = new FlxUI(null, UI_box);
 		tab_group.name = "Events";
-
-		eventTimeStepper = new FlxUINumericStepper(850, 50, 0.25, 0, 0, 9999, 3);
 
 		repeatCheckbox = new FlxUICheckBox(950, 50, null, null, "Repeat Event?");
 		repeatCheckbox.checked = false;
@@ -2029,6 +2066,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		repeatCountStepper.name = 'repeatCount';
 		centerXToObject(repeatCheckbox, repeatBeatGapStepper);
 		centerXToObject(repeatCheckbox, repeatCountStepper);
+
+		eventTimeStepper = new FlxUINumericStepper(850, 50, 0.25, 0, -9999, 9999, 3);
+		eventTimeStepper.name = 'eventTime';
 
 		eventModInputText = new FlxInputText(25, 50, 160, '', 8);
 		eventModInputText.onTextChange.add((str:String, str2:String) -> {
@@ -2082,11 +2122,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				trace(highlightedEvent);
 			}
 			eventEaseInputText.alpha = 1;
-			eventTimeInputText.alpha = 1;
-			if (et != 'ease') {
+			if (et != 'ease')
 				eventEaseInputText.alpha = 0.5;
-				eventTimeInputText.alpha = 0.5;
-			}
 			dirtyUpdateEvents = true;
 			hasUnsavedChanges = true;
 		});
@@ -2216,11 +2253,12 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 		addUI(tab_group, "eventEaseInputText", eventEaseInputText, 'Event Ease', 'The easing function used by the event (only for "ease" type).');
 		addUI(tab_group, "eventTimeInputText", eventTimeInputText, 'Event Ease Time', 'How long the tween takes to finish in beats (only for "ease" type).');
+		addUI(tab_group, "eventTimeStepper", eventTimeStepper, 'Event Time', 'The beat the event occurs on.');
 		tab_group.add(makeLabel(eventEaseInputText, 0, -15, "Event Ease"));
 		tab_group.add(makeLabel(eventTimeInputText, 0, -15, "Event Ease Time (in Beats)"));
+		tab_group.add(makeLabel(eventTimeStepper, 0, -15, "Event Beat Time"));
 		tab_group.add(makeLabel(eventTypeDropDown, 0, -15, "Event Type"));
 
-		addUI(tab_group, "eventTimeStepper", eventTimeStepper, 'Event Time', 'The beat that the event occurs on.');
 		addUI(tab_group, "selectedEventDataStepper", selectedEventDataStepper, 'Selected Event', 'Which modifier event is selected within the event.');
 		tab_group.add(makeLabel(selectedEventDataStepper, 0, -15, "Selected Data Index"));
 		tab_group.add(makeLabel(eventDataInputText, 0, -15, "Raw Event Data"));
@@ -2285,7 +2323,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		// update texts and stuff
 		updateSelectedEventDataStepper();
 		try{
-			eventTimeStepper.value = Std.parseFloat(highlightedEvent[EVENT_DATA][EVENT_TIME]) ?? 0;
+			eventTimeStepper.value = highlightedEvent[EVENT_DATA][EVENT_TIME];
 		}
 		catch(e){
 			eventTimeStepper.value = 0;
@@ -2352,6 +2390,14 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						// trace(stackedHighlightedEvents);
 						highlightedEvent = stackedHighlightedEvents[Std.int(stackedEventStepper.value)];
 						onSelectEvent(true);
+					}
+				case "eventTime":
+					var data = getCurrentEventInData();
+					if (data != null) {
+						data[EVENT_DATA][EVENT_TIME] = eventTimeStepper.value;
+						highlightedEvent = data;
+						hasUnsavedChanges = true;
+						dirtyUpdateEvents = true;
 					}
 			}
 		}
@@ -2535,6 +2581,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		 check_diff_modchart = new FlxUICheckBox(saveJson.x + 100,saveJson.y,null,null,"Save per difficulty",120);
 		tab_group.add(check_diff_modchart);
 
+		check_autoSave = new FlxUICheckBox(check_diff_modchart.x, check_diff_modchart.y + 25, null, null, "Auto-Save (5 min)", 120);
+		check_autoSave.checked = true;
+		tab_group.add(check_autoSave);
+
 		tab_group.add(sliderRate);
 		addUI(tab_group, "resetSpeed", resetSpeed, 'Reset Speed', 'Resets playback speed to 1.');
 		tab_group.add(songSlider);
@@ -2664,6 +2714,24 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		_file.removeEventListener(openfl.events.Event.CANCEL, onSaveCancel);
 		_file.removeEventListener(IOErrorEvent.IO_ERROR, onSaveError);
 		_file = null;
+	}
+
+	function showAutoSaveNotification() {
+		var text = new FlxText(0, UI_box.y + UI_box.height + 20, FlxG.width, "Modchart Auto-Saved!", 32);
+		text.alignment = CENTER;
+		text.color = FlxColor.LIME;
+		text.borderStyle = FlxTextBorderStyle.OUTLINE;
+		text.borderColor = FlxColor.BLACK;
+		text.borderSize = 2;
+		text.scrollFactor.set();
+		add(text);
+
+		FlxTween.tween(text, {alpha: 0, y: text.y - 40}, 2, {
+			ease: FlxEase.quadOut,
+			onComplete: function(_) {
+				text.destroy();
+			}
+		});
 	}
 }
 
