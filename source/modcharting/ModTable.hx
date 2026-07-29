@@ -64,6 +64,7 @@ class ModTable
         add(new YModifier('y'));
         add(new ZModifier('z'));
         add(new ConfusionModifier('confusion'));
+        add(new CameraModifier('cameramodifier'));
     
         for (i in 0...(NoteMovement.keyCount+NoteMovement.playerKeyCount))
         {
@@ -71,10 +72,12 @@ class ModTable
             add(new YModifier('y'+i, ModifierType.LANESPECIFIC));
             add(new ZModifier('z'+i, ModifierType.LANESPECIFIC));
             add(new ConfusionModifier('confusion'+i, ModifierType.LANESPECIFIC));
+            add(new CameraModifier('cameramodifier'+i, ModifierType.LANESPECIFIC));
             setModTargetLane('x'+i, i);
             setModTargetLane('y'+i, i);
             setModTargetLane('z'+i, i);
             setModTargetLane('confusion'+i, i);
+            setModTargetLane('cameramodifier'+i, i);
         }
     }
 

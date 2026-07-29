@@ -39,6 +39,10 @@ class NotePositionData implements IFlxDestroyable {
 	public var redOffset:Float;
 	public var greenOffset:Float;
 	public var blueOffset:Float;
+	public var camera:flixel.FlxCamera;
+	public var cameraScrollX:Float = 0.0;
+	public var cameraScrollY:Float = 0.0;
+	public var cameraZoom:Float = 1.0;
 
 	public function new() {}
 
@@ -97,6 +101,10 @@ class NotePositionData implements IFlxDestroyable {
 		this.redOffset = 0;
 		this.greenOffset = 0;
 		this.blueOffset = 0;
+		this.camera = null;
+		this.cameraScrollX = 0.0;
+		this.cameraScrollY = 0.0;
+		this.cameraZoom = 1.0;
 	}
 
 	public function setupNote(
@@ -149,5 +157,9 @@ class NotePositionData implements IFlxDestroyable {
 		this.redOffset = 0;
 		this.greenOffset = 0;
 		this.blueOffset = 0;
+		this.camera = null;
+		this.cameraScrollX = 0.0;
+		this.cameraScrollY = 0.0;
+		this.cameraZoom = 1.0;
 	}
 }

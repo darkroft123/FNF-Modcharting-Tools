@@ -323,8 +323,32 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		}
 
 		addDataToStrum(noteData, strumNote);
-		strumNote.cameras = this.cameras;
+		strumNote.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
+		strumNote.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
+
+		var oldX = strumNote.x;
+		var oldY = strumNote.y;
+		var oldScaleX = strumNote.scale.x;
+		var oldScaleY = strumNote.scale.y;
+
+		if (noteData.camera != null && noteData.camera.zoom != 1.0) {
+			var zoom = noteData.camera.zoom;
+			var zoomEffect = 1.0 - noteData.cameraZoom; // 0 = full comp, 1 = no comp
+			if (zoomEffect > 0) {
+				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
+				strumNote.x = (strumNote.x - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
+				strumNote.y = (strumNote.y - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
+				strumNote.scale.x *= targetZoom;
+				strumNote.scale.y *= targetZoom;
+			}
+		}
+
 		strumNote.draw();
+
+		strumNote.x = oldX;
+		strumNote.y = oldY;
+		strumNote.scale.x = oldScaleX;
+		strumNote.scale.y = oldScaleY;
 	}
 
 	public function drawNote(noteData:NotePositionData) {
@@ -362,8 +386,32 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			noteData.scaleY *= (1 / -thisNotePos.z);
 		}
 		addDataToNote(noteData, daNote);
-		daNote.cameras = this.cameras;
+		daNote.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
+		daNote.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
+
+		var oldX = daNote.x;
+		var oldY = daNote.y;
+		var oldScaleX = daNote.scale.x;
+		var oldScaleY = daNote.scale.y;
+
+		if (noteData.camera != null && noteData.camera.zoom != 1.0) {
+			var zoom = noteData.camera.zoom;
+			var zoomEffect = 1.0 - noteData.cameraZoom;
+			if (zoomEffect > 0) {
+				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
+				daNote.x = (daNote.x - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
+				daNote.y = (daNote.y - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
+				daNote.scale.x *= targetZoom;
+				daNote.scale.y *= targetZoom;
+			}
+		}
+
 		daNote.draw();
+
+		daNote.x = oldX;
+		daNote.y = oldY;
+		daNote.scale.x = oldScaleX;
+		daNote.scale.y = oldScaleY;
 	}
 
 	public function drawSustainNote(noteData:NotePositionData) {
@@ -377,6 +425,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		if (daNote.mesh == null)
 			daNote.mesh = new SustainStrip(daNote);
 
+		daNote.scrollFactor.set(0, 0);
 		daNote.mesh.scrollFactor.x = daNote.scrollFactor.x;
 		daNote.mesh.scrollFactor.y = daNote.scrollFactor.y;
 		daNote.alpha = noteData.alpha;
@@ -430,7 +479,24 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		// render that shit
 		try {
 			daNote.mesh.constructVertices(noteData, thisNotePos, nextHalfNotePos, nextNotePos, flipGraphic, reverseClip);
-			daNote.mesh.cameras = this.cameras;
+			daNote.mesh.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
+			daNote.mesh.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
+
+			if (noteData.camera != null && noteData.camera.zoom != 1.0) {
+				var zoom = noteData.camera.zoom;
+				var zoomEffect = 1.0 - noteData.cameraZoom;
+				if (zoomEffect > 0) {
+					var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
+					for (i in 0...daNote.mesh.vertices.length) {
+						if (i % 2 == 0) {
+							daNote.mesh.vertices[i] = (daNote.mesh.vertices[i] - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
+						} else {
+							daNote.mesh.vertices[i] = (daNote.mesh.vertices[i] - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
+						}
+					}
+				}
+			}
+
 			daNote.mesh.draw();
 		} catch (e) {
 			trace(e);

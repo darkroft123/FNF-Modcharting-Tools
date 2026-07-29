@@ -203,6 +203,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		PitchModifier,
 		YawModifier,
 		ConfusionModifier,
+		CameraModifier,
 		MiniModifier,
 		ScaleModifier,
 		ScaleXModifier,
@@ -387,6 +388,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 	public var camHUD:FlxCamera;
 	public var camGame:FlxCamera;
+	public var camGamePreview:FlxCamera;
 	public var camNotes:FlxCamera;
 	public var notes:FlxTypedGroup<Note>;
 
@@ -473,6 +475,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 		FlxG.cameras.setDefaultDrawTarget(camGame, true);
 		#end
+
+		camGamePreview = new FlxCamera();
+		camGamePreview.bgColor.alpha = 0;
+		FlxG.cameras.add(camGamePreview, false);
 
 		camNotes = new FlxCamera();
 		camNotes.bgColor.alpha = 0;
@@ -1985,8 +1991,11 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		var data = getCurrentEventInData();
 		if (data != null) {
 			var dataStr:String = findCorrectModData(data);
-			var dataSplit = dataStr.split(',');
-			return dataSplit[(getEventModIndex() * 2) + (isMod ? 1 : 0)];
+			if (dataStr != null) {
+				var dataSplit = dataStr.split(',');
+				var val = dataSplit[(getEventModIndex() * 2) + (isMod ? 1 : 0)];
+				if (val != null) return val;
+			}
 		}
 		return "";
 	}
