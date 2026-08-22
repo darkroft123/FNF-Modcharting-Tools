@@ -116,8 +116,15 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	override function update(elapsed:Float) {
 		try {
 			eventManager.update(elapsed);
-			tweenManager.update(elapsed); // should be automatically paused when you pause in game
-			timerManager.update(elapsed);
+			#if LEATHER
+			var scaledElapsed = elapsed * (Std.isOfType(flixel.FlxG.state, states.PlayState) ? states.PlayState.songMultiplier : 1.0);
+			#elseif PSYCH
+			var scaledElapsed = elapsed * PlayState.instance.playbackRate;
+			#else
+			var scaledElapsed = elapsed;
+			#end
+			tweenManager.update(scaledElapsed); // should be automatically paused when you pause in game
+			timerManager.update(scaledElapsed);
 		} catch (e) {
 			trace(e);
 		}
@@ -196,7 +203,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var noteSkewX = notes.members[noteIndex].skew.x;
 		var noteSkewY = notes.members[noteIndex].skew.y;
 
-		var noteAlpha:Float = #if PSYCH notes.members[noteIndex].multAlpha; #else notes.members[noteIndex].isSustainNote ? 0.6 : 1; #end
+		var noteAlpha:Float = #if PSYCH notes.members[noteIndex].multAlpha; #else notes.members[noteIndex].isSustainNote ? 1 : 1; #end
 
 		var noteData:NotePositionData = NotePositionData.get();
 		noteData.setupNote(noteX, noteY, noteZ, lane, noteScaleX, noteScaleY, noteSkewX, noteSkewY, playfieldIndex, noteAlpha, curPos, noteDist,
@@ -506,17 +513,21 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		NotePositionData.recycle(nextNotePos);
 	}
 
-	public function drawStuff(notePositions:Array<NotePositionData>) {
-		for (noteData in notePositions) {
-			if (noteData.isStrum) // draw strum
-				drawStrum(noteData);
-			else if (!notes.members[noteData.index].isSustainNote) // draw regular note
-				drawNote(noteData);
-			else { // draw sustain
-				drawSustainNote(noteData);
-			}
-		}
-	}
+    public function drawStuff(notePositions:Array<NotePositionData>) {
+        for (noteData in notePositions) {
+            if (noteData.isStrum)
+                drawStrum(noteData);
+        }
+        for (noteData in notePositions) {
+            if (!noteData.isStrum && notes.members[noteData.index].isSustainNote)
+                drawSustainNote(noteData);
+        }
+
+        for (noteData in notePositions) {
+            if (!noteData.isStrum && !notes.members[noteData.index].isSustainNote)
+                drawNote(noteData);
+        }
+    }
 
 	public function getSustainPoint(noteData:NotePositionData, timeOffset:Float):NotePositionData {
 		var daNote:Note = notes.members[noteData.index];

@@ -46,6 +46,16 @@ class SustainStrip extends FlxStrip
             indices.push(ind);
     }
 
+    static inline function safeScale(z:Float):Float {
+        // when z is 0 (no perspective), avoid division by zero
+        // return 1.0 so the sustain renders at normal width
+        return (z > -0.001 && z < 0.001) ? 1.0 : (1.0 / -z);
+    }
+
+    override public function draw():Void {
+        super.draw();
+    }
+
     public function constructVertices(noteData:NotePositionData, thisNotePos:Vector3D, nextHalfNotePos:NotePositionData, nextNotePos:NotePositionData, flipGraphic:Bool, reverseClip:Bool)
     {
         var yOffset = -1; //fix small gaps
@@ -58,38 +68,42 @@ class SustainStrip extends FlxStrip
                 cachedVerts.push(0);
         }
 
+        var thisScale = safeScale(thisNotePos.z) * noteData.scaleX;
+        var halfScale = safeScale(nextHalfNotePos.z) * noteData.scaleX;
+        var nextScale = safeScale(nextNotePos.z) * nextNotePos.scaleX;
+
         if (flipGraphic)
         {
             cachedVerts[0] = nextNotePos.x;
             cachedVerts[1] = nextNotePos.y;
-            cachedVerts[2] = nextNotePos.x+(daNote.frameWidth*(1/-nextNotePos.z)*noteData.scaleX);
+            cachedVerts[2] = nextNotePos.x+(daNote.frameWidth*nextScale);
             cachedVerts[3] = nextNotePos.y;
 
             cachedVerts[4] = nextHalfNotePos.x;
             cachedVerts[5] = nextHalfNotePos.y;
-            cachedVerts[6] = nextHalfNotePos.x+(daNote.frameWidth*(1/-nextHalfNotePos.z)*noteData.scaleX);
+            cachedVerts[6] = nextHalfNotePos.x+(daNote.frameWidth*halfScale);
             cachedVerts[7] = nextHalfNotePos.y;
 
             cachedVerts[8] = thisNotePos.x;
             cachedVerts[9] = thisNotePos.y;
-            cachedVerts[10] = thisNotePos.x+(daNote.frameWidth*(1/-thisNotePos.z)*nextNotePos.scaleX);
+            cachedVerts[10] = thisNotePos.x+(daNote.frameWidth*thisScale);
             cachedVerts[11] = thisNotePos.y;
         }
         else 
         {
             cachedVerts[0] = thisNotePos.x;
             cachedVerts[1] = thisNotePos.y;
-            cachedVerts[2] = thisNotePos.x+(daNote.frameWidth*(1/-thisNotePos.z)*noteData.scaleX);
+            cachedVerts[2] = thisNotePos.x+(daNote.frameWidth*thisScale);
             cachedVerts[3] = thisNotePos.y;
 
             cachedVerts[4] = nextHalfNotePos.x;
             cachedVerts[5] = nextHalfNotePos.y;
-            cachedVerts[6] = nextHalfNotePos.x+(daNote.frameWidth*(1/-nextHalfNotePos.z)*noteData.scaleX);
+            cachedVerts[6] = nextHalfNotePos.x+(daNote.frameWidth*halfScale);
             cachedVerts[7] = nextHalfNotePos.y;
 
             cachedVerts[8] = nextNotePos.x;
             cachedVerts[9] = nextNotePos.y;
-            cachedVerts[10] = nextNotePos.x+(daNote.frameWidth*(1/-nextNotePos.z)*nextNotePos.scaleX);
+            cachedVerts[10] = nextNotePos.x+(daNote.frameWidth*nextScale);
             cachedVerts[11] = nextNotePos.y;
         }
         vertices = new DrawData(12, true, cachedVerts.copy());

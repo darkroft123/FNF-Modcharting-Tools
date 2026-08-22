@@ -2423,29 +2423,99 @@ class WormModifier extends Modifier {
 }
 
 class CameraModifier extends Modifier {
-	override function setupSubValues() {
-		subValues.set('scrollX', new ModifierSubValue(0.0));
-		subValues.set('scrollY', new ModifierSubValue(0.0));
-		subValues.set('zoom', new ModifierSubValue(0.0));
-	}
+    override function setupSubValues() {
+        subValues.set('camera', new ModifierSubValue(0.0));
+        subValues.set('scrollX', new ModifierSubValue(0.0));
+        subValues.set('scrollY', new ModifierSubValue(0.0));
+        subValues.set('zoom', new ModifierSubValue(0.0));
+    }
 
-	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
-		if (currentValue >= 0.5) {
-			if (renderer != null && renderer.inEditor) {
-				var editor:Dynamic = renderer.instance;
-				noteData.camera = editor.camGamePreview;
-			} else if (PlayState.instance != null) {
-				noteData.camera = PlayState.instance.camGame;
-			}
-			noteData.cameraScrollX = subValues.get('scrollX').value;
-			noteData.cameraScrollY = subValues.get('scrollY').value;
-			noteData.cameraZoom = subValues.get('zoom').value;
-		}
-	}
+    override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+        if (currentValue >= 0.5) {
+            if (renderer != null && renderer.inEditor) {
+                var editor:Dynamic = renderer.instance;
+                noteData.camera = editor.camGamePreview;
+            } else if (PlayState.instance != null) {
+                var camValue = subValues.get('camera').value;
+                
+                if (camValue == 1) {
+                    noteData.camera = PlayState.instance.camGame;
+                } else if (camValue == 2) {
+                    noteData.camera = PlayState.instance.camOther;
+                } else {
+                    noteData.camera = PlayState.instance.camHUD;
+                }
+            }
+            noteData.cameraScrollX = subValues.get('scrollX').value;
+            noteData.cameraScrollY = subValues.get('scrollY').value;
+            noteData.cameraZoom = subValues.get('zoom').value;
+        }
+    }
 
-	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
-		noteMath(noteData, lane, 0, pf);
-	}
+    override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+        noteMath(noteData, lane, 0, pf);
+    }
 }
 
 
+class InfiniteFormModifier extends Modifier {
+	override function setupSubValues() {
+		subValues.set("speed", new ModifierSubValue(1.0));
+		subValues.set("amplitude", new ModifierSubValue(600.0));
+		subValues.set("phase", new ModifierSubValue(0.0));
+	}
+
+	function getCenterX():Float {
+		var totalX:Float = 0;
+		for (x in NoteMovement.defaultStrumX)
+			totalX += x;
+		return totalX / NoteMovement.defaultStrumX.length;
+	}
+
+	function getCenterY():Float {
+		return flixel.FlxG.height / 2 - 56;
+	}
+
+	function infinityMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int, isStrum:Bool = false) {
+		var mult = states.PlayState.songMultiplier;
+		if (mult == 0) mult = 1.0;
+		var speed = subValues.get("speed").value * mult;
+		var amp = subValues.get("amplitude").value;
+		var phase = subValues.get("phase").value * Math.PI / 4;
+
+		var safeAmp = amp;
+		if (safeAmp == 0) safeAmp = 1.0;
+		
+		// To prevent desync/visual acceleration at massive amplitudes, we MUST decouple physical speed from amplitude.
+		// A constant of 0.75 is a good middle ground: it's playable, doesn't cause desync, and traces a good amount of the curve.
+		var dynamicMult = 0.75 / Math.abs(safeAmp);
+
+		var centerX = getCenterX();
+		var centerY = getCenterY();
+
+		if (isStrum) {
+			noteData.x += (centerX - noteData.x) * currentValue;
+			noteData.y += (centerY - noteData.y) * currentValue;
+		}
+
+		if (!isStrum) {
+			var t = (curPos * dynamicMult * speed) + phase + (Math.PI / 2);
+			var infX = amp * Math.cos(t);
+			var infY = (amp * Math.sin(2.0 * t)) / 2.0;
+
+			var targetX = centerX + infX;
+			var targetY = centerY + infY;
+
+			noteData.x += (targetX - noteData.x) * currentValue;
+			noteData.y += (targetY - noteData.y) * currentValue;
+		}
+	}
+
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		infinityMath(noteData, lane, curPos, pf, false);
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		infinityMath(noteData, lane, 0, pf, true);
+	}
+}

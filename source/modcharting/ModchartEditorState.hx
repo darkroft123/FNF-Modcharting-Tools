@@ -248,6 +248,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		WiggleXModifier,
 		WiggleYModifier,
 		WiggleZModifier,
+		InfiniteFormModifier,
 		// Scroll Modifiers
 		ReverseModifier,
 		CrossModifier,
@@ -1367,7 +1368,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						sustainNote.mustPress = gottaHitNote;
 						#else
 						var sustainNote:Note = new Note(daStrumTime + (Std.int(Conductor.stepCrochet) * susNote) + Std.int(Conductor.stepCrochet), daNoteData,
-							oldNote, true, 0, songNotes[4], null, [0], gottaHitNote);
+							oldNote, true, 0, songNotes[4] ?? "default", null, [0], gottaHitNote);
 						sustainNote.mustPress = gottaHitNote;
 						#end
 						#if PSYCH
@@ -1919,6 +1920,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				return "Makes notes move in a zigzag pattern.";
 			case "SquareModifier":
 				return "Makes notes move in a square.";
+			case "InfiniteFormModifier":
+				return "Makes notes move in an infinity shape. SubMods: speed, amplitude, phase.";
 		}
 		return "Unknown Modifer";
 	}
