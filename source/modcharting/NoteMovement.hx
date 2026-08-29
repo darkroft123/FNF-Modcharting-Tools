@@ -136,6 +136,10 @@ class NoteMovement
         return col;
     }
 
+    public static function mirrorX(base:Float, value:Float):Float {
+        return base + (base - value);
+    }
+
 
 }
 

@@ -2425,6 +2425,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 
 	public var check_lanePaths:FlxUICheckBox;
+	var check_opponentSide:FlxUICheckBox;
 
 	public function setupPlayfieldUI() {
 		var tab_group = new FlxUI(null, UI_box);
@@ -2576,6 +2577,51 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			}
 		};
 
+		check_opponentSide = new FlxUICheckBox(
+			check_lanePaths.x,
+			check_lanePaths.y + 25,
+			null,
+			null,
+			"Opponent Side Preview",
+			100
+		);
+		check_opponentSide.checked = false;
+		check_opponentSide.callback = function() {
+			opponentMode = check_opponentSide.checked;
+
+			playerStrums.clear();
+			opponentStrums.clear();
+			strumLineNotes.clear();
+
+			if (check_opponentSide.checked) {
+				if (check_middlescroll.checked) {
+					generateStaticArrows(0.5, false);
+					generateStaticArrows(50, true);
+				} else {
+					generateStaticArrows(0, false);
+					generateStaticArrows(1, true);
+				}
+			} else {
+				if (check_middlescroll.checked) {
+					generateStaticArrows(50, false);
+					generateStaticArrows(0.5, true);
+				} else {
+					generateStaticArrows(0, true);
+					generateStaticArrows(1);
+				}
+			}
+
+			NoteMovement.getDefaultStrumPosEditor(this);
+
+			unspawnNotes = [];
+			loadedNotes = [];
+			clearNotesAfter(0);
+			generateSong(null);
+			loadedNotes = unspawnNotes.copy();
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
+		};
+
 		var resetSpeed:FlxButton = new FlxButton(sliderRate.x + 300, sliderRate.y, 'Reset', function() {
 			playbackSpeed = 1.0;
 		});
@@ -2607,6 +2653,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		tab_group.add(check_middlescroll);
 		tab_group.add(check_lanePaths);
 		tab_group.add(check_downscroll);
+		tab_group.add(check_opponentSide);
 		#if (PSYCH && PSYCHVERSION >= "0.7.3") tab_group.add(check_mute_opponent_vocals); #end
 
 		UI_box.addGroup(tab_group);
