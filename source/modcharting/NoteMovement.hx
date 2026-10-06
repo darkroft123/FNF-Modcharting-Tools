@@ -102,7 +102,7 @@ class NoteMovement
         leatherEngineOffsetStuff.clear();
         #end
     }
-    public static function setNotePath(daNote:Note, lane:Int, scrollSpeed:Float, curPos:Float, noteDist:Float, incomingAngleX:Float, incomingAngleY:Float)
+    public static inline function setNotePath(daNote:Note, lane:Int, scrollSpeed:Float, curPos:Float, noteDist:Float, incomingAngleX:Float, incomingAngleY:Float)
     {
         daNote.x = defaultStrumX[lane];
         daNote.y = defaultStrumY[lane];

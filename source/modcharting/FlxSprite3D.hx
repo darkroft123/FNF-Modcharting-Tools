@@ -23,6 +23,19 @@ class FlxSprite3D extends FlxSkewedSprite {
 
 	private var _rotationMatrix(default, null):FlxMatrix;
 
+	/**
+	 * Set while FoxLite owns the 3D projection for this sprite.
+	 *
+	 * Two things have to change when that happens. Flixel routes sprites with no rotation, unit
+	 * scale and no blend through `drawSimple()`, which is a plain `copyPixels()` blit that never
+	 * touches the shader, so the FoxLite vertex stage would be bypassed entirely. And the
+	 * classic `rotateXYZ()` below has to be skipped, or the rotation gets applied twice: once
+	 * by that 2D matrix and once by the GPU.
+	 *
+	 * `PlayfieldRenderer` flips this on the note right before it draws it, and off again after.
+	 */
+	public var foxLiteActive:Bool = false;
+
 	override function initVars() {
 		super.initVars();
 		_rotationMatrix = new FlxMatrix();
@@ -34,6 +47,16 @@ class FlxSprite3D extends FlxSkewedSprite {
 		_skewMatrix = null;
 		_rotationMatrix = null;
 		super.destroy();
+	}
+
+	/**
+	 * `isSimpleRenderBlit` rather than `isSimpleRender` so the `FlxG.renderTile` behaviour is
+	 * left alone: this only has to defeat the blit fast path.
+	 */
+	override public function isSimpleRenderBlit(?camera:FlxCamera):Bool {
+		if (foxLiteActive)
+			return false;
+		return super.isSimpleRenderBlit(camera);
 	}
 
 	override function drawComplex(camera:FlxCamera) {
@@ -59,11 +82,14 @@ class FlxSprite3D extends FlxSkewedSprite {
 			_matrix.concat(_skewMatrix);
 		}
 
-		rotateXYZ(angle3D);
-		// move back after doing rotations
-		xr = -(_matrix.a * origin.x + _matrix.c * origin.y) + origin.x;
-		yr = -(_matrix.b * origin.x + _matrix.d * origin.y) + origin.y;
-		_matrix.translate(xr, yr);
+		// The GPU applies angle3D when FoxLite is active, so the classic matrix must not.
+		if (!foxLiteActive) {
+			rotateXYZ(angle3D);
+			// move back after doing rotations
+			xr = -(_matrix.a * origin.x + _matrix.c * origin.y) + origin.x;
+			yr = -(_matrix.b * origin.x + _matrix.d * origin.y) + origin.y;
+			_matrix.translate(xr, yr);
+		}
 
 		getScreenPosition(_point, camera);
 		_point -= offset;
@@ -84,12 +110,15 @@ class FlxSprite3D extends FlxSkewedSprite {
 	 * @see https://github.com/raysan5/raylib/blob/7f8bf2233c29ebbd98566962bb3730095b11a4e2/src/raymath.h#L1790
 	 */
 	private function rotateXYZ(angle:FlxPoint3D) {
-		var cosz = Math.cos(-FlxAngle.asRadians(angle.z));
-		var sinz = Math.sin(-FlxAngle.asRadians(angle.z));
-		var cosy = Math.cos(-FlxAngle.asRadians(angle.y));
-		var siny = Math.sin(-FlxAngle.asRadians(angle.y));
-		var cosx = Math.cos(-FlxAngle.asRadians(angle.x));
-		var sinx = Math.sin(-FlxAngle.asRadians(angle.x));
+		var radZ = -FlxAngle.asRadians(angle.z);
+		var radY = -FlxAngle.asRadians(angle.y);
+		var radX = -FlxAngle.asRadians(angle.x);
+		var cosz = Math.cos(radZ);
+		var sinz = Math.sin(radZ);
+		var cosy = Math.cos(radY);
+		var siny = Math.sin(radY);
+		var cosx = Math.cos(radX);
+		var sinx = Math.sin(radX);
 
 		_rotationMatrix.a = cosz * cosy;
 		_rotationMatrix.b = (cosz * siny * sinx) - (sinz * cosx);

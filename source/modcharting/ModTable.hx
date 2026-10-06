@@ -105,7 +105,7 @@ class ModTable
         }
     }
 
-    public function applyStrumMods(noteData:NotePositionData, lane:Int, pf:Int) : Void
+    public inline function applyStrumMods(noteData:NotePositionData, lane:Int, pf:Int) : Void
     {
         if (table[pf] != null && table[pf][lane] != null)
         {
@@ -115,7 +115,7 @@ class ModTable
             }
         }
     }
-    public function applyNoteMods(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) : Void
+    public inline function applyNoteMods(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) : Void
     {
         if (table[pf] != null && table[pf][lane] != null)
         {
@@ -125,7 +125,7 @@ class ModTable
             }
         }
     }
-    public function applyNoteDistMods(noteDist:Float, lane:Int, pf:Int) : Float
+    public inline function applyNoteDistMods(noteDist:Float, lane:Int, pf:Int) : Float
     {
         if (table[pf] != null && table[pf][lane] != null)
         {
@@ -135,7 +135,7 @@ class ModTable
         }
         return noteDist;
     }
-    public function applyCurPosMods(lane:Int, curPos:Float, pf:Int) : Float
+    public inline function applyCurPosMods(lane:Int, curPos:Float, pf:Int) : Float
     {
         if (table[pf] != null && table[pf][lane] != null)
         {
@@ -165,6 +165,7 @@ class ModTable
     
     public function tweenModifier(modifier:String, val:Float, time:Float, ease:String, beat:Float, ?tag:String = null)
     {
+        ModchartFuncs.ensureModifier(modifier, instance);
         var modifiers:Map<String, Modifier> = renderer.modifierTable.modifiers;
         if (modifiers.exists(modifier))
         {       
@@ -201,9 +202,14 @@ class ModTable
 
     public function tweenModifierSubValue(modifier:String, subValue:String, val:Float, time:Float, ease:String, beat:Float, ?tag:String = null)
     {
+        ModchartFuncs.ensureModifier(modifier, instance);
         var modifiers:Map<String, Modifier> = renderer.modifierTable.modifiers;
         if (modifiers.exists(modifier))
         {       
+            if (!modifiers.get(modifier).subValues.exists(subValue))
+            {
+                modifiers.get(modifier).subValues.set(subValue, new Modifier.ModifierSubValue(0.0));
+            }
             if (modifiers.get(modifier).subValues.exists(subValue))
             {
                 var easefunc = ModchartUtil.getFlxEaseByString(ease);   

@@ -47,8 +47,6 @@ class SustainStrip extends FlxStrip
     }
 
     static inline function safeScale(z:Float):Float {
-        // when z is 0 (no perspective), avoid division by zero
-        // return 1.0 so the sustain renders at normal width
         return (z > -0.001 && z < 0.001) ? 1.0 : (1.0 / -z);
     }
 
@@ -58,7 +56,7 @@ class SustainStrip extends FlxStrip
 
     public function constructVertices(noteData:NotePositionData, thisNotePos:Vector3D, nextHalfNotePos:NotePositionData, nextNotePos:NotePositionData, flipGraphic:Bool, reverseClip:Bool)
     {
-        var yOffset = -1; //fix small gaps
+        var yOffset = -1;
         if (reverseClip)
             yOffset *= -1;
 

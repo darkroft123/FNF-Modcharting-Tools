@@ -71,7 +71,7 @@ import modcharting.*;
 import modcharting.PlayfieldRenderer.StrumNoteType;
 import modcharting.Modifier;
 import modcharting.ModchartFile;
-import modcharting.LanePathRenderer;		
+import modcharting.LanePathRenderer;
 using StringTools;
 using utilities.BackgroundUtil;
 
@@ -292,7 +292,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		BeatZModifier,
 		ShrinkModifier,
 		ZigZagModifier,
-		//SquareModifier,
+		SquareModifier,
 		SawtoothModifier,
 		DigitalModifier,
 		SpiralXModifier,
@@ -320,10 +320,28 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		EaseYModifier,
 		EaseZModifier,
 		ShakyNotesModifier,
+		ShakeNotesModifier,
 		ArrowPath,
 		ColorTransformRed,
 		ColorTransformGreen,
 		ColorTransformBlue,
+		// Camera state modifiers
+		// These steer the whole 3D camera instead of per note data, so the name field is free:
+		// `PlayfieldRenderer` finds them by class. Unguarded on purpose. They load and save in
+		// every chart and only take effect with -D MODCHART_FOXLITE, which keeps them out of the
+		// way of the optional dependency while still letting a chart be authored before the 3D
+		// renderer is compiled in.
+		FovModifier,
+		DepthModifier,
+		TiltModifier,
+		RotateXModifier,
+		RotateYModifier,
+		RotateZModifier,
+		StrumRotateXModifier,
+		StrumRotateYModifier,
+		StrumRotateZModifier,
+		CamPosModifier,
+		PivotPosModifier,
 	];
 	
 	public static var easeList:Array<String> = [
@@ -680,6 +698,15 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		hideUI.y -= hideUI.height;
 		hideUI.x -= hideUI.width;
 		add(hideUI);
+
+		playfieldRenderer.editorPaused = true;
+		editorPosition = 0;
+		setPosition(0);
+		if (inst != null) inst.pause();
+		if (vocals != null) vocals.pause();
+		#if (PSYCH && PSYCHVERSION >= "0.7.3")
+		if (opponentVocals != null) opponentVocals.pause();
+		#end
 	}
 
 	#if (PSYCH && PSYCHVERSION >= "0.7.1")
@@ -700,23 +727,131 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	var dirtyUpdateModifiers:Bool = false;
 	var totalElapsed:Float = 0;
 
+	/**
+	 * How far before beat 0 the editor can be scrolled, in beats.
+	 *
+	 * This is the countdown origin: `PlayState.startCountdown()` sets `Conductor.songPosition` to
+	 * `-crochet * 5`, so the "three two one go" plays while the position is negative and only
+	 * `startSong()` fires once it crosses 0. Events placed in that window therefore run before the
+	 * song starts, which is how `createPost` behaves in game.
+	 *
+	 * Going further back buys nothing and drifts away from what the engine treats as valid: the
+	 * only floor anywhere is `if (curStep < -20) curStep = -20;` in `startCountdown()`, and -20
+	 * steps is exactly -5 beats.
+	 */
+	static inline final PRE_ROLL_BEATS:Float = 5;
+
+	/**
+	 * True while the editor is previewing the silent pre-roll window.
+	 *
+	 * Playback before beat 0 cannot start the tracks: there is no audio to play and handing
+	 * `FlxSound.play()` a negative time makes it resume from the head of the buffer, which would
+	 * bleed the first moments of the song in early. So the tracks stay parked at 0 and only the
+	 * song position advances, the same split the engine makes during the countdown. Playback is
+	 * handed back to the tracks as soon as the position crosses 0.
+	 */
+	var preRolling:Bool = false;
+
+	/**
+	 * The editor's timeline position in milliseconds. May be negative.
+	 *
+	 * This deliberately cannot be `inst.time`. `FlxSound.set_time` runs its argument through
+	 * `FlxMath.bound(time, _offset, length - 1)`, so it clamps to `[0, length - 1]` and stores 0
+	 * for anything negative: writing -300 to `inst.time` reads back 0. Anything that scrolled or
+	 * clamped the timeline through the sound was therefore pinned at beat 0 no matter what it was
+	 * asked to do, silently. So `inst.time` stays what it can actually represent, the audio head,
+	 * and this is the position the beat math and the grid read.
+	 */
+	var editorPosition:Float = 0;
+
+	/**
+	 * Moves the timeline, keeping the virtual position, `Conductor.songPosition` and the audio
+	 * heads in sync.
+	 *
+	 * Audio is mirrored clamped at 0, which is all `FlxSound` can hold. In the pre roll that is the
+	 * point: the position walks backwards over the countdown with the tracks parked at the head of
+	 * the buffer, the same split the engine makes during "three two one go".
+	 */
+	function setPosition(value:Float):Void {
+		editorPosition = value;
+		Conductor.songPosition = value;
+		var audioTime:Float = value < 0 ? 0 : value;
+		inst.time = audioTime;
+		if (vocals != null) {
+			vocals.time = audioTime;
+		}
+		#if (PSYCH && PSYCHVERSION >= "0.7.3")
+		if (opponentVocals != null) {
+			opponentVocals.time = audioTime;
+		}
+		#end
+		if (songSlider != null) {
+			songSlider.value = value;
+		}
+	}
+
 	override public function update(elapsed:Float) {
 		totalElapsed += elapsed;
 		highlight.alpha = 0.8 + Math.sin(totalElapsed * 5) * 0.15;
 		super.update(elapsed);
-		if (inst.time < 0) {
+		var minTime:Float = -Conductor.crochet * PRE_ROLL_BEATS;
+		if (editorPosition < minTime) {
 			inst.pause();
-			inst.time = 0;
-			Conductor.songPosition = inst.time;
-
-		} else if (inst.time > inst.length) {
+			preRolling = false;
+			// The tracks stay parked at the head of the buffer on purpose: this is a silent pre
+			// roll, same as the countdown in game. `setPosition` parks the audio at 0 and only the
+			// virtual position goes negative, which is all the beat math needs.
+			setPosition(minTime);
+			playfieldRenderer.editorPaused = true;
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
+		} else if (inst.length > 0 && editorPosition >= inst.length) {
 			inst.pause();
-			inst.time = 0;
-			Conductor.songPosition = inst.time;
-
+			preRolling = false;
+			playfieldRenderer.editorPaused = true;
+			if (vocals != null) {
+				vocals.pause();
+			}
+			#if (PSYCH && PSYCHVERSION >= "0.7.3")
+			if (opponentVocals != null) {
+				opponentVocals.pause();
+			}
+			#end
+			setPosition(0);
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
 		}
-		if(inst.playing){
-			Conductor.songPosition += FlxG.elapsed * 1000.0 * inst.pitch;
+		// The pre-roll advances on its own while the tracks stay parked, mirroring how
+		// `PlayState.update()` walks `songPosition` up to 0 before it calls `startSong()`.
+		//
+		// Gated on `editorPaused` as well as the flag: every path that grabs the position (the
+		// floor clamp above, the wheel, the nudge keys) pauses and sets `editorPaused`, so the
+		// pre-roll stops dead when the user takes over instead of running away on its own.
+		//
+		// The handover keys off `editorPosition`, not `inst.time`: during the pre roll only the
+		// position moves and `inst.time` is deliberately left parked at 0.
+		if (preRolling && editorPosition >= 0) {
+			preRolling = false;
+			playfieldRenderer.editorPaused = false;
+			setPosition(editorPosition);
+			inst.play();
+			if (vocals != null)
+				vocals.play();
+			#if (PSYCH && PSYCHVERSION >= "0.7.3")
+			if (opponentVocals != null)
+				opponentVocals.play();
+			#end
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
+		}
+		if (inst.playing || (preRolling && !playfieldRenderer.editorPaused) || (!playfieldRenderer.editorPaused && editorPosition >= 0)) {
+			// Advanced on the virtual position rather than read back off `inst`, so the pre roll
+			// keeps moving with the tracks paused. The audio head follows on its own once `inst` is
+			// actually playing; mirroring it here too would double the rate.
+			editorPosition += FlxG.elapsed * 1000.0 * inst.pitch;
+			Conductor.songPosition = editorPosition;
+			if (songSlider != null)
+				songSlider.value = editorPosition;
 		}
 
 		var songPosPixelPos = (((Conductor.songPosition / Conductor.stepCrochet) % 4) * gridSize);
@@ -765,9 +900,18 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
 			#end
+			#if MODCHART_FOXLITE
+			if (FlxG.keys.justPressed.F) {
+				openSubState(new modcharting.foxlite.FoxLiteTestSubstate(playfieldRenderer));
+			}
+			#end
 			if (FlxG.keys.justPressed.SPACE) {
-				if (inst.playing) {
+				// Matches the advance condition below, so that a `preRolling` flag left over after
+				// the user grabbed the position does not swallow the key press: if the pre-roll is
+				// no longer actually running, this falls through to starting playback instead.
+				if (inst.playing || (preRolling && !playfieldRenderer.editorPaused)) {
 					inst.pause();
+					preRolling = false;
 					if (vocals != null)
 						vocals.pause();
 					#if (PSYCH && PSYCHVERSION >= "0.7.3")
@@ -775,21 +919,33 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						opponentVocals.pause();
 					#end
 					playfieldRenderer.editorPaused = true;
+				} else if (editorPosition < 0) {
+					// In the pre-roll window: advance the position without touching the tracks,
+					// so the countdown is silent and the song does not start early.
+					preRolling = true;
+					playfieldRenderer.editorPaused = false;
+					dirtyUpdateNotes = true;
+					dirtyUpdateEvents = true;
 				} else {
+					// `play(); pause(); time = x; play()` is the Flixel idiom for seeking a sound
+					// that has never been played. Read off `editorPosition` rather than `inst.time`,
+					// which is only the audio head and is the thing this branch is meant to avoid
+					// trusting.
 					if (vocals != null) {
 						vocals.play();
 						vocals.pause();
-						vocals.time = inst.time;
+						vocals.time = editorPosition;
 						vocals.play();
 					}
 					#if (PSYCH && PSYCHVERSION >= "0.7.3")
 					if (opponentVocals != null) {
 						opponentVocals.play();
 						opponentVocals.pause();
-						opponentVocals.time = inst.time;
+						opponentVocals.time = editorPosition;
 						opponentVocals.play();
 					}
 					#end
+					setPosition(editorPosition);
 					inst.play();
 					playfieldRenderer.editorPaused = false;
 					dirtyUpdateNotes = true;
@@ -807,18 +963,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				if (opponentVocals != null)
 					opponentVocals.pause();
 				#end
-				inst.time += (FlxG.mouse.wheel * Conductor.stepCrochet * 0.8 * shiftThing);
-				Conductor.songPosition = inst.time;
-				if (vocals != null) {
-					vocals.pause();
-					vocals.time = inst.time;
-				}
-				#if (PSYCH && PSYCHVERSION >= "0.7.3")
-				if (opponentVocals != null) {
-					opponentVocals.pause();
-					opponentVocals.time = inst.time;
-				}
-				#end
+				setPosition(editorPosition + (FlxG.mouse.wheel * Conductor.stepCrochet * 0.8 * shiftThing));
 				playfieldRenderer.editorPaused = true;
 				dirtyUpdateNotes = true;
 				dirtyUpdateEvents = true;
@@ -832,8 +977,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				if (opponentVocals != null)
 					opponentVocals.pause();
 				#end
-				inst.time += (Conductor.crochet * 4 * shiftThing);
-								Conductor.songPosition = inst.time;
+				playfieldRenderer.editorPaused = true;
+				setPosition(editorPosition + (Conductor.crochet * 4 * shiftThing));
 
 				dirtyUpdateNotes = true;
 				dirtyUpdateEvents = true;
@@ -846,8 +991,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				if (opponentVocals != null)
 					opponentVocals.pause();
 				#end
-				inst.time -= (Conductor.crochet * 4 * shiftThing);
-								Conductor.songPosition = inst.time;
+				playfieldRenderer.editorPaused = true;
+				setPosition(editorPosition - (Conductor.crochet * 4 * shiftThing));
 
 				dirtyUpdateNotes = true;
 				dirtyUpdateEvents = true;
@@ -977,8 +1122,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				}
 			} else {
 				if (FlxG.mouse.justPressed) {
-					var timeFromMouse = ((highlight.x - grid.x) / gridSize / 4) - 1;
-					// trace(timeFromMouse);
+					var rawTimeFromMouse = ((highlight.x - grid.x) / gridSize / 4) - 1;
+					var timeFromMouse:Float = FlxG.keys.pressed.SHIFT ? FlxMath.roundDecimal(rawTimeFromMouse, 2) : Math.floor(rawTimeFromMouse);
 					var event = addNewEvent(timeFromMouse);
 					highlightedEvent = event;
 					onSelectEvent();
@@ -1106,6 +1251,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	}
 
 	function addNewEvent(time:Float) {
+		time = FlxMath.roundDecimal(time, 2);
 		var event:Array<Dynamic> = ['ease', [time, 1, 'cubeInOut', ','], [false, 1, 1]];
 		if (highlightedEvent != null) // copy over current event data (without acting as a reference)
 		{
@@ -1227,6 +1373,37 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 	public var addedVocals:Array<String> = [];
 
+	#if LEATHER
+	function forceNoteSkin(note:Note, arrowType:String, uiSkin:String):Void {
+		var basePath = 'ui skins/$uiSkin/arrows/';
+		if (Assets.exists(Paths.image('$basePath$arrowType', 'shared')))
+			note.frames = Paths.getSparrowAtlas('$basePath$arrowType', 'shared');
+		else if (Assets.exists(Paths.image('${basePath}default', 'shared')))
+			note.frames = Paths.getSparrowAtlas('${basePath}default', 'shared');
+		else
+			note.frames = Paths.getSparrowAtlas('ui skins/default/arrows/default', 'shared');
+
+		var keyCount:Int = note.mustPress ? PlayState.SONG.playerKeyCount : PlayState.SONG.keyCount;
+		if (keyCount < 1) keyCount = 4;
+		var animName:String = NoteVariables.animationDirections[keyCount - 1][note.noteData];
+		if (animName == null) animName = "default";
+		note.animation.addByPrefix("default", '${animName}0', 24);
+		note.animation.addByPrefix("hold", '${animName} hold0', 24);
+		note.animation.addByPrefix("holdend", '${animName} hold end0', 24);
+
+		if (note.isSustainNote) {
+			if (note.animation.curAnim != null && note.animation.curAnim.name.endsWith("end"))
+				note.animation.play("holdend");
+			else
+				note.animation.play("hold");
+		} else {
+			note.animation.play("default");
+		}
+		note.updateHitbox();
+		note.centerOffsets();
+	}
+	#end
+
 	public function generateSong(songData:SongData):Void {
 		var songData = PlayState.SONG;
 		Conductor.bpm = songData.bpm;
@@ -1280,22 +1457,24 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		try {
 			inst.loadEmbedded(Paths.inst(PlayState.SONG.song, PlayState.SONG.specialAudioName ?? PlayState.storyDifficultyStr.toLowerCase()));
 		}
+		editorPosition = inst.time;
 		Conductor.songPosition = inst.time;
 		FlxG.sound.list.add(inst);
 
 		inst.onComplete = function() {
 			inst.pause();
-			Conductor.songPosition = 0;
 			if (vocals != null) {
 				vocals.pause();
-				vocals.time = 0;
 			}
 			#if (PSYCH && PSYCHVERSION >= "0.7.3")
 			if (opponentVocals != null) {
 				opponentVocals.pause();
-				opponentVocals.time = 0;
 			}
 			#end
+			playfieldRenderer.editorPaused = true;
+			setPosition(0);
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
 		};
 
 		notes = new FlxTypedGroup<Note>();
@@ -1351,6 +1530,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				#elseif LEATHER
 				var swagNote:Note = new Note(daStrumTime, daNoteData, oldNote, false, 0, songNotes[4] ?? "default", null, [0], gottaHitNote);
 				swagNote.sustainLength = songNotes[2];
+				forceNoteSkin(swagNote, songNotes[4] ?? "default", PlayState.SONG.ui_Skin);
 				#end
 
 				swagNote.scrollFactor.set();
@@ -1370,6 +1550,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						var sustainNote:Note = new Note(daStrumTime + (Std.int(Conductor.stepCrochet) * susNote) + Std.int(Conductor.stepCrochet), daNoteData,
 							oldNote, true, 0, songNotes[4] ?? "default", null, [0], gottaHitNote);
 						sustainNote.mustPress = gottaHitNote;
+						forceNoteSkin(sustainNote, songNotes[4] ?? "default", PlayState.SONG.ui_Skin);
 						#end
 						#if PSYCH
 						sustainNote.gfNote = (section.gfSection && (songNotes[1] < 4));
@@ -1378,6 +1559,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						sustainNote.parent = swagNote;
 						#end
 						sustainNote.scrollFactor.set();
+						if (susNote == floorSus) {
+							if (sustainNote.animation.getByName("holdend") != null)
+								sustainNote.animation.play("holdend");
+						}
 						unspawnNotes.push(sustainNote);
 
 						#if PSYCH
@@ -1547,8 +1732,32 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 	public function updateSubModList(modName:String) {
 		subMods = [""];
-		if (playfieldRenderer.modifierTable.modifiers.exists(modName)) {
-			for (subModName => subMod in playfieldRenderer.modifierTable.modifiers.get(modName).subValues) {
+		if (modName == null || modName == "") {
+			subModDropDown.setData(FlxUIDropDownMenu.makeStrIdLabelArray(subMods, true));
+			return;
+		}
+
+		var cleanModName = modName.split(":")[0].trim();
+		var modInstance:Modifier = null;
+
+		if (playfieldRenderer != null && playfieldRenderer.modifierTable != null && playfieldRenderer.modifierTable.modifiers.exists(cleanModName)) {
+			modInstance = playfieldRenderer.modifierTable.modifiers.get(cleanModName);
+		} else if (playfieldRenderer != null && playfieldRenderer.modchart != null) {
+			var className:String = "";
+			for (m in playfieldRenderer.modchart.data.modifiers) {
+				if (m[MOD_NAME] == cleanModName) {
+					className = m[MOD_CLASS];
+					break;
+				}
+			}
+			if (className == "") className = cleanModName;
+			modInstance = ModchartFuncs.createModifier(className, cleanModName);
+		} else {
+			modInstance = ModchartFuncs.createModifier(cleanModName, cleanModName);
+		}
+
+		if (modInstance != null && modInstance.subValues != null) {
+			for (subModName in modInstance.subValues.keys()) {
 				subMods.push(subModName);
 			}
 		}
@@ -1890,6 +2099,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				return "Modifier similar to TanWave but in angle";
 			case 'ShakyNotesModifier':
 				return "Modifier used to make notes shake in their on possition";
+			case 'ShakeNotesModifier':
+				return "Modifier used to make notes shake instantly in position";
 			case 'TordnadoModifier':
 				return "Modifier similar to invertSine, but notes will do their own path instead";
 			case 'ArrowPath':
@@ -1920,8 +2131,30 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				return "Makes notes move in a zigzag pattern.";
 			case "SquareModifier":
 				return "Makes notes move in a square.";
-			case "InfiniteFormModifier":
-				return "Makes notes move in an infinity shape. SubMods: speed, amplitude, phase.";
+		case "InfiniteFormModifier":
+			return "Makes notes move in an infinity shape. SubMods: speed, amplitude, phase.";
+		case "FovModifier":
+			return "Widens or narrows the 3D camera on top of the default FOV. Needs -D MODCHART_FOXLITE. SubMods: fov (degrees to add, negative pulls in).";
+		case "DepthModifier":
+			return "Controls how far notes travel into the screen. Needs -D MODCHART_FOXLITE. SubMods: scale (multiplier on note Z, base 0.001), offset (constant depth shift).";
+		case "TiltModifier":
+			return "Rotates the whole 3D playfield. Needs -D MODCHART_FOXLITE. SubMods: x, y, z (degrees).";
+		case "RotateXModifier":
+			return "Rotates notes on X axis in 3D GPU space (degrees).";
+		case "RotateYModifier":
+			return "Rotates notes on Y axis in 3D GPU space (degrees).";
+		case "RotateZModifier":
+			return "Rotates notes on Z axis in 3D GPU space (degrees).";
+		case "StrumRotateXModifier":
+			return "Rotates strum targets on X axis in 3D GPU space (degrees).";
+		case "StrumRotateYModifier":
+			return "Rotates strum targets on Y axis in 3D GPU space (degrees).";
+		case "StrumRotateZModifier":
+			return "Rotates strum targets on Z axis in 3D GPU space (degrees).";
+		case "CamPosModifier":
+			return "Shifts 3D camera position in world space. SubMods: x, y, z.";
+		case "PivotPosModifier":
+			return "Shifts 3D playfield pivot origin in world space. SubMods: x, y, z.";
 		}
 		return "Unknown Modifer";
 	}
@@ -2357,6 +2590,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		eventTypeDropDown.selectedLabel = highlightedEvent[EVENT_TYPE];
 		eventModInputText.text = getEventModData(true);
 		eventValueInputText.text = getEventModData(false);
+		updateSubModList(eventModInputText.text);
 		repeatBeatGapStepper.value = highlightedEvent[EVENT_REPEAT][EVENT_REPEATBEATGAP];
 		repeatCountStepper.value = highlightedEvent[EVENT_REPEAT][EVENT_REPEATCOUNT];
 		repeatCheckbox.checked = highlightedEvent[EVENT_REPEAT][EVENT_REPEATBOOL];
@@ -2453,18 +2687,23 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			dirtyUpdateEvents = true;
 		};
 
-		songSlider = new FlxUISlider(inst, 'time', 20, 200, 0, inst.length, 250, null, 5, FlxColor.WHITE, FlxColor.BLACK);
+		// `FlxSlider.updateValue()` hands `callback` a 0..1 *ratio*, not the value, and only writes
+		// the tracked property when `setVariable` is on. The old callback sidestepped that by ignoring
+		// its argument and re-reading `inst.time` after the slider had written it.
+		//
+		// Two things change here. The slider is bound to `editorPosition` instead of `inst.time`,
+		// because FlxSound clamps `inst.time` to `0 .. length - 1` and that is exactly what made the
+		// pre roll unreachable. Its floor is therefore `-5` beats rather than 0. And the callback
+		// re-derives the absolute time from the ratio, so it stays correct whether or not
+		// `setVariable` wrote `editorPosition` for us.
+		var minSongTime:Float = -Conductor.crochet * PRE_ROLL_BEATS;
+		songSlider = new FlxUISlider(this, 'editorPosition', 20, 200, minSongTime, inst.length, 250, null, 5, FlxColor.WHITE, FlxColor.BLACK);
 		songSlider.valueLabel.visible = false;
 		songSlider.maxLabel.visible = false;
 		songSlider.minLabel.visible = false;
 		songSlider.nameLabel.text = 'Song Time';
-		songSlider.callback = function(fuck:Float) {
-			vocals.time = inst.time;
-			#if (PSYCH && PSYCHVERSION >= "0.7.3")
-			if (opponentVocals != null)
-				opponentVocals.time = inst.time;
-			#end
-			Conductor.songPosition = inst.time;
+		songSlider.callback = function(ratio:Float) {
+			setPosition((ratio * (inst.length - minSongTime)) + minSongTime);
 			dirtyUpdateEvents = true;
 			dirtyUpdateNotes = true;
 		};
@@ -2564,6 +2803,13 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		);
 
 		check_lanePaths.checked = false;
+
+		#if MODCHART_FOXLITE
+		var btnTest3D = new FlxButton(check_lanePaths.x + 130, check_lanePaths.y, "Test FoxLite 3D", function() {
+			openSubState(new modcharting.foxlite.FoxLiteTestSubstate(playfieldRenderer));
+		});
+		tab_group.add(btnTest3D);
+		#end
 
 		check_lanePaths.callback = function()
 		{

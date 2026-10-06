@@ -132,49 +132,49 @@ class ModchartUtil {
 	static var _cachedVec3D:Vector3D = new Vector3D();
 	static var _cachedPerspVec3D:Vector3D = new Vector3D();
 
+	// cached constants for perspective (avoid per-frame recomputation)
+	static var _cachedTanHalfFOV:Float = 0;
+	static var _cachedInvTanHalfFOV:Float = 0;
+	static var _lastCachedFOV:Float = -1;
+
+	static inline function ensureFOVCached(FOV:Float):Void {
+		if (FOV != _lastCachedFOV) {
+			_cachedTanHalfFOV = Math.sin(FOV * 0.5) / Math.cos(FOV * 0.5);
+			_cachedInvTanHalfFOV = 1.0 / _cachedTanHalfFOV;
+			_lastCachedFOV = FOV;
+		}
+	}
+
 	/**
 		Converts a Vector3D to its in world coordinates using perspective math
 	**/
 	public static function calculatePerspective(pos:Vector3D, FOV:Float, offsetX:Float = 0, offsetY:Float = 0) {
-		/* math from opengl lol
-			found from this website https://ogldev.org/www/tutorial12/tutorial12.html
-		 */
-
-		// TODO: maybe try using actual matrix???
-
 		var newz = pos.z - 1;
 		var zRange = zNear - zFar;
-		var tanHalfFOV = Math.sin(FOV * 0.5) / Math.cos(FOV * 0.5); // faster tan
-		if (pos.z > 1) // if above 1000 z basically
-			newz = 0; // should stop weird mirroring with high z values
+		if (pos.z > 1)
+			newz = 0;
 
-		// var m00 = 1/(tanHalfFOV);
-		// var m11 = 1/tanHalfFOV;
-		// var m22 = (-zNear - zFar) / zRange; //isnt this just 1 lol
-		// var m23 = 2 * zFar * zNear / zRange;
-		// var m32 = 1;
+		ensureFOVCached(FOV);
 
-		var xOffsetToCenter = pos.x - (FlxG.width * 0.5); // so the perspective focuses on the center of the screen
-		var yOffsetToCenter = pos.y - (FlxG.height * 0.5);
+		var halfW = FlxG.width * 0.5;
+		var halfH = FlxG.height * 0.5;
+
+		var xOffsetToCenter = pos.x - halfW;
+		var yOffsetToCenter = pos.y - halfH;
 
 		var zPerspectiveOffset = (newz + (2 * zFar * zNear / zRange));
 
-		// xOffsetToCenter += (offsetX / (1/-zPerspectiveOffset));
-		// yOffsetToCenter += (offsetY / (1/-zPerspectiveOffset));
 		xOffsetToCenter += (offsetX * -zPerspectiveOffset);
 		yOffsetToCenter += (offsetY * -zPerspectiveOffset);
 
-		var xPerspective = xOffsetToCenter * (1 / tanHalfFOV);
-		var yPerspective = yOffsetToCenter * tanHalfFOV;
+		var xPerspective = xOffsetToCenter * _cachedInvTanHalfFOV;
+		var yPerspective = yOffsetToCenter * _cachedTanHalfFOV;
 		xPerspective /= -zPerspectiveOffset;
 		yPerspective /= -zPerspectiveOffset;
 
-		pos.x = xPerspective + (FlxG.width * 0.5); // offset it back to normal
-		pos.y = yPerspective + (FlxG.height * 0.5);
+		pos.x = xPerspective + halfW;
+		pos.y = yPerspective + halfH;
 		pos.z = zPerspectiveOffset;
-
-		// pos.z -= 1;
-		// pos = perspectiveMatrix.transformVector(pos);
 
 		return pos;
 	}
@@ -190,12 +190,12 @@ class ModchartUtil {
 	public static function getCartesianCoords3D(theta:Float, phi:Float, radius:Float):Vector3D {
 		var pos = _cachedVec3D;
 		var rad = FlxAngle.TO_RAD;
-		pos.x = Math.cos(theta * rad) * Math.sin(phi * rad);
-		pos.y = Math.cos(phi * rad);
-		pos.z = Math.sin(theta * rad) * Math.sin(phi * rad);
-		pos.x *= radius;
-		pos.y *= radius;
-		pos.z *= radius;
+		var thetaRad = theta * rad;
+		var phiRad = phi * rad;
+		var sinPhi = Math.sin(phiRad);
+		pos.x = Math.cos(thetaRad) * sinPhi * radius;
+		pos.y = Math.cos(phiRad) * radius;
+		pos.z = Math.sin(thetaRad) * sinPhi * radius;
 
 		return pos;
 	}
@@ -279,9 +279,25 @@ class ModchartUtil {
 	}
 
 	public static function getTimeFromBeat(beat:Float) {
+		var bpmMap = Conductor.bpmChangeMap;
+
+		// Negative beats are the pre-roll window: events placed there fire during the
+		// "three two one go" countdown, which `PlayState.startCountdown()` implements by starting
+		// `Conductor.songPosition` at `-crochet * 5`. Without this branch the loop below becomes
+		// the empty range `0...Math.floor(beat)`, `leftOverBeat` comes out as 0 and every negative
+		// beat collapses onto time 0, so -1, -2 and -16 would all fire together in no order.
+		if (beat < 0) {
+			// Nothing in the bpm map sits before time 0, so the whole pre-roll is measured with the
+			// opening bpm. That is also what `startCountdown()` uses, since `Conductor.crochet`
+			// still holds the first tempo while the position is negative. Taking it from the map
+			// rather than from `SONG.bpm` keeps the mapping continuous at beat 0, where the loop
+			// below switches to the map on its first iteration.
+			var preBpm = bpmMap.length > 0 ? bpmMap[0].bpm : (PlayState.SONG != null ? PlayState.SONG.bpm : Conductor.bpm);
+			return (60 / preBpm) * 1000 * beat;
+		}
+
 		var totalTime:Float = 0;
 		var curBpm = PlayState.SONG != null ? PlayState.SONG.bpm : Conductor.bpm;
-		var bpmMap = Conductor.bpmChangeMap;
 		var bpmIndex:Int = 0;
 		var maxBpm = bpmMap.length;
 		for (i in 0...Math.floor(beat)) {

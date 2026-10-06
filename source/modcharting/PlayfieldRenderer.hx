@@ -1,5 +1,6 @@
 package modcharting;
 
+import Lambda;
 import modcharting.BezierPathTween;
 import modcharting.BezierPathNumTween;
 import flixel.util.FlxTimer.FlxTimerManager;
@@ -16,10 +17,16 @@ import flixel.graphics.frames.FlxFrame;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.FlxSprite;
 import flixel.FlxG;
+import flixel.FlxCamera;
 import modcharting.Modifier;
 import modcharting.LanePathRenderer;
 import flixel.system.FlxAssets.FlxShader;
 import modcharting.TweenManager;
+#if MODCHART_FOXLITE
+import modcharting.foxlite.FoxPlayfieldBridge;
+// `FovModifier`, `DepthModifier` and `TiltModifier` are deliberately not imported here. They live
+// in this package, are not guarded, and are reached from the `modifierTable` scan by `Std.downcast`.
+#end
 #if LEATHER
 import states.PlayState;
 import game.Note;
@@ -78,6 +85,40 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	var _vec3:Vector3D = new Vector3D();
 	var _vec3b:Vector3D = new Vector3D();
 
+	/**
+	 * Hardware accelerated 3D path, or `null` when built without `MODCHART_FOXLITE`.
+	 *
+	 * Only notes and strums go through it. Sustain strips keep the classic mesh path, since a
+	 * `FoxSpriteShader` projects a textured quad and a sustain is a variable length strip with
+	 * its own vertex construction.
+	 */
+	#if MODCHART_FOXLITE
+	public var foxBridge:FoxPlayfieldBridge;
+
+	// Diagnostics for `applyFoxLiteModifiers()`. The scan runs every frame, so without these the
+	// only thing visible on a broken setup is silence: a missing modifier, a scoping mistake and a
+	// working tween all look identical from the outside.
+	var foxReportedScan = false;
+	var foxReportedActive = false;
+	var foxLastApplied = '';
+	#end
+
+	/**
+	 * Whether FoxLite owns the projection for this frame.
+	 *
+	 * Compiles down to a constant `false` without the define, so the classic path below stays
+	 * completely untouched and no dead branches are emitted. When it is true the classic
+	 * `ModchartUtil.calculatePerspective()` bake has to be skipped: the shader performs that
+	 * projection, so doing it on the CPU as well would apply the perspective divide twice.
+	 */
+	inline function foxActive():Bool {
+		#if MODCHART_FOXLITE
+		return foxBridge != null && foxBridge.active && foxBridge.enabled;
+		#else
+		return false;
+		#end
+	}
+
 	private function get_modifiers():Map<String, Modifier> {
 		return modifierTable.modifiers; // back compat with lua modcharts
 	}
@@ -105,6 +146,27 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		timerManager = new FlxTimerManager();
 		eventManager = new ModchartEventManager(this);
 		modifierTable = new ModTable(instance, this);
+
+		#if MODCHART_FOXLITE
+		// Wrapped so a missing or broken FoxLite install degrades to the classic renderer
+		// instead of taking the whole game down. `new()` already swallows its own failures and
+		// leaves `active` false, this covers anything thrown outside that.
+		try {
+			foxBridge = new FoxPlayfieldBridge(FlxG.width, FlxG.height, ModchartUtil.defaultFOV);
+			trace('[modcharting-tools] FoxLite bridge creado. active=' + Std.string(foxBridge.active) + ' enabled=' + Std.string(foxBridge.enabled)
+				+ ' fovBase=' + Std.string(ModchartUtil.defaultFOV));
+		} catch (e) {
+			foxBridge = null;
+			trace('[modcharting-tools] FoxLite bridge could not be created, using the classic renderer: ' + Std.string(e));
+		}
+
+		// Registered here rather than in `ModTable.loadDefaultModifiers()` so the classic build
+		// keeps compiling without any FoxLite types in scope.
+		//
+		// No instances are pre-seeded: `applyFoxLiteModifiers()` finds these three by class, so a
+		// blank placeholder tagged `foxfov` would just sit in the table competing with the real one
+		// the chart defines. Absent modifiers are handled by the resets in that method instead.
+		#end
 
 		addNewPlayfield(0, 0, 0);
 
@@ -156,9 +218,44 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		var positions = getNotePositions();
 		try {
+			#if MODCHART_FOXLITE
+			if (foxActive()) {
+				if (!foxReportedActive) {
+					foxReportedActive = true;
+					trace('[modcharting-tools] FoxLite ACTIVO: las notas y strums se dibujan en 3D. Fov/Depth/Tilt ya tienen efecto.');
+				}
+				// Camera state is playfield wide, so the modifiers are pulled once here instead
+				// of running through the per note pipeline. Must be before beginFrame(): that is
+				// what turns the tilt and FOV the modifiers wrote into matrices.
+				applyFoxLiteModifiers();
+				// Must run before drawStuff(): updates the camera matrices and the playfield
+				// pivot, which every note's world transform is parented to.
+				foxBridge.beginFrame(0, ModchartUtil.defaultFOV, FlxG.width, FlxG.height);
+			} else if (!foxReportedActive && foxBridge != null) {
+				// The single most common "my camera modifiers do nothing": the chart builds, the
+				// bridge exists, but something has it switched off. `foxActive()` folds three
+				// conditions together, so name the one that failed.
+				foxReportedActive = true;
+				trace('[modcharting-tools] FoxLite INACTIVO: la camara y los modifiers Fov/Depth/Tilt NO se aplican. Razón -> '
+					+ (foxBridge == null ? 'bridge no creado' : (!foxBridge.active ? 'bridge.active = false (fallo al inicializar el contexto de render)' : 'bridge.enabled = false')));
+			}
+			#end
+
 			drawStuff(positions);
+
+			#if MODCHART_FOXLITE
+			if (foxActive()) {
+				// Drops wrappers for notes that no longer exist at their index. Also the natural
+				// place to reset the per note flags, since every note is drawn inside drawStuff().
+				foxBridge.endFrame(notes.members.length, strumGroup.members.length);
+				resetFoxLiteFlags();
+			}
+			#end
 		} catch (e) {
 			trace(e + '\n' + e.stack);
+			#if MODCHART_FOXLITE
+			resetFoxLiteFlags();
+			#end
 		}
 		for (data in positions)
 			NotePositionData.recycle(data);
@@ -253,7 +350,10 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			for (modName => mod in modifierTable.modifiers) {
 				if (mod.currentValue != mod.baseValue) {
 					var extra = mod.gatherExtraStrumData(pf);
-					if (extra != null) notePositions = notePositions.concat(extra);
+					if (extra != null) {
+						for (e in extra)
+							notePositions.push(e);
+					}
 				}
 			}
 			for (i in 0...notes.members.length) {
@@ -266,19 +366,10 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 				var sustainTimeThingy:Float = 0;
 
-				// just causes too many issues lol, might fix it at some point
-				/*if (notes.members[i].animation.curAnim.name.endsWith('end') && ClientPrefs.downScroll)
-					{
-						if (noteDist > 0)
-							sustainTimeThingy = (NoteMovement.getFakeCrochet()/4)/2; //fix stretched sustain ends (downscroll)
-						//else 
-							//sustainTimeThingy = (-NoteMovement.getFakeCrochet()/4)/songSpeed;
-				}*/
-
 				var curPos = getNoteCurPos(i, sustainTimeThingy);
 				curPos = modifierTable.applyCurPosMods(lane, curPos, pf);
 
-				if ((notes.members[i].wasGoodHit || (notes.members[i].prevNote.wasGoodHit))
+				if ((notes.members[i].wasGoodHit || (notes.members[i].prevNote != null && notes.members[i].prevNote.wasGoodHit))
 					&& curPos >= 0
 					&& notes.members[i].isSustainNote)
 					curPos = 0; // sustain clip
@@ -302,7 +393,10 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			for (modName => mod in modifierTable.modifiers) {
 				if (mod.currentValue != mod.baseValue) {
 					var extra = mod.gatherExtraNoteData(pf);
-					if (extra != null) notePositions = notePositions.concat(extra);
+					if (extra != null) {
+						for (e in extra)
+							notePositions.push(e);
+					}
 				}
 			}
 		}
@@ -312,8 +406,24 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				return -1;
 			else if (a.z > b.z)
 				return 1;
-			else
+			else {
+				// Draw sustain body notes before sustain end notes so holdend renders ON TOP of hold body
+				var noteA = notes.members[a.index];
+				var noteB = notes.members[b.index];
+				if (noteA != null && noteB != null) {
+					if (!noteA.isSustainNote && noteB.isSustainNote) return -1;
+					if (noteA.isSustainNote && !noteB.isSustainNote) return 1;
+					if (noteA.isSustainNote && noteB.isSustainNote) {
+						var animA = (noteA.animation.curAnim != null) ? noteA.animation.curAnim.name : "";
+						var animB = (noteB.animation.curAnim != null) ? noteB.animation.curAnim.name : "";
+						var isEndA = animA.endsWith("end");
+						var isEndB = animB.endsWith("end");
+						if (!isEndA && isEndB) return -1;
+						if (isEndA && !isEndB) return 1;
+					}
+				}
 				return 0;
+			}
 		});
 		return notePositions;
 	}
@@ -321,7 +431,10 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	public function drawStrum(noteData:NotePositionData) {
 		if (noteData.alpha <= 0)
 			return;
-		var changeX:Bool = ((noteData.z > 0 || noteData.z < 0) && noteData.z != 0);
+		// When FoxLite is active the shader does the projection, so `changeX` has to stay false
+		// to keep the classic `calculatePerspective()` bake below from dividing twice.
+		var fox:Bool = foxActive();
+		var changeX:Bool = !fox && noteData.z != 0;
 		var strumNote = strumGroup.members[noteData.index];
 		var thisNotePos:Vector3D;
 		if (changeX) {
@@ -353,7 +466,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		if (noteData.camera != null && noteData.camera.zoom != 1.0) {
 			var zoom = noteData.camera.zoom;
-			var zoomEffect = 1.0 - noteData.cameraZoom; // 0 = full comp, 1 = no comp
+			var zoomEffect = 1.0 - noteData.cameraZoom;
 			if (zoomEffect > 0) {
 				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
 				strumNote.x = (strumNote.x - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
@@ -363,7 +476,21 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			}
 		}
 
+		#if MODCHART_FOXLITE
+		if (fox) {
+			// FlxFox3DSprite.draw() reads sprite.camera, so this has to be pinned before the
+			// uniforms are baked rather than relying on the `cameras` assignment above.
+			var foxCam:FlxCamera = (noteData.camera != null) ? noteData.camera : this.camera;
+			foxBridge.applyStrum(strumNote, noteData.index, noteData.z, noteData.angleX, noteData.angleY, noteData.angleZ, foxCam);
+			markFoxLite(strumNote, true);
+		}
+		#end
+
 		strumNote.draw();
+
+		#if MODCHART_FOXLITE
+		markFoxLite(strumNote, false, true, noteData.index);
+		#end
 
 		strumNote.x = oldX;
 		strumNote.y = oldY;
@@ -375,7 +502,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		if (noteData.alpha <= 0.001 || !visible || alpha <= 0.001)
 			return;
 	
-		var changeX:Bool = ((noteData.z > 0 || noteData.z < 0) && noteData.z != 0);
+		var fox:Bool = foxActive();
+		var changeX:Bool = !fox && noteData.z != 0;
 		var daNote = notes.members[noteData.index];
 		var thisNotePos:Vector3D;
 		if (changeX) {
@@ -391,12 +519,228 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		}
 		
 		if(daNote.isSustainNote){
-			if(!changeX){
+			if(!changeX && !fox){
 				thisNotePos.x += daNote.width;
 			}
-			if(!daNote.animation.curAnim.name.endsWith("end")){
+			var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+			if(!animName.endsWith("end")){
 				noteData.scaleY *= Conductor.stepCrochet / 100 * Note.SCALE_MULT * daNote.speed;
 			}
+		}
+
+		noteData.x = thisNotePos.x;
+		noteData.y = thisNotePos.y;
+		if (changeX) {
+			noteData.scaleX *= (1 / -thisNotePos.z);
+			noteData.scaleY *= (1 / -thisNotePos.z);
+		}
+		addDataToNote(noteData, daNote);
+		daNote.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
+		daNote.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
+
+		var oldX = daNote.x;
+		var oldY = daNote.y;
+		var oldScaleX = daNote.scale.x;
+		var oldScaleY = daNote.scale.y;
+
+		if (noteData.camera != null && noteData.camera.zoom != 1.0) {
+			var zoom = noteData.camera.zoom;
+			var zoomEffect = 1.0 - noteData.cameraZoom;
+			if (zoomEffect > 0) {
+				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
+				daNote.x = (daNote.x - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
+				daNote.y = (daNote.y - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
+				daNote.scale.x *= targetZoom;
+				daNote.scale.y *= targetZoom;
+			}
+		}
+
+		#if MODCHART_FOXLITE
+		if (fox && !daNote.isSustainNote) {
+			var foxCam:FlxCamera = (noteData.camera != null) ? noteData.camera : this.camera;
+			foxBridge.applyNote(daNote, noteData.index, noteData.z, noteData.angleX, noteData.angleY, noteData.angleZ, foxCam);
+			markFoxLite(daNote, true);
+		}
+		#end
+
+		daNote.draw();
+
+		#if MODCHART_FOXLITE
+		markFoxLite(daNote, false, false, noteData.index);
+		#end
+
+		daNote.x = oldX;
+		daNote.y = oldY;
+		daNote.scale.x = oldScaleX;
+		daNote.scale.y = oldScaleY;
+	}
+
+	#if MODCHART_FOXLITE
+	/**
+	 * Tells a note that FoxLite owns its projection for this draw.
+	 *
+	 * `FlxSprite3D` needs it to skip the classic 2D rotation matrix and to refuse the
+	 * `drawSimple()` blit path, which would bypass the shader entirely.
+	 */
+	inline function markFoxLite(sprite:FlxSprite, value:Bool, ?isStrum:Bool = false, ?index:Int = -1) {
+		var sprite3D = Std.downcast(sprite, FlxSprite3D);
+		if (sprite3D != null)
+			sprite3D.foxLiteActive = value;
+		if (!value && foxBridge != null && index >= 0) {
+			if (isStrum)
+				foxBridge.detachStrum(sprite, index);
+			else
+				foxBridge.detachNote(sprite, index);
+		}
+	}
+
+	/**
+	 * Clears the flag on every note and strum.
+	 *
+	 * The flag is normally reset right after each `draw()`, but `draw()` can throw partway
+	 * through the loop and leave notes that were never reached still flagged. Since a stale
+	 * `true` would permanently suppress the classic rotation for that note, this sweeps the
+	 * pools. `foxLiteActive` only exists on `FlxSprite3D`, so the downcast filters out engine
+	 * note types that do not extend it.
+	 */
+	function resetFoxLiteFlags() {
+		for (strum in strumGroup.members)
+			markFoxLite(strum, false);
+		for (note in notes.members)
+			markFoxLite(note, false);
+	}
+
+	/**
+	 * Pushes the FoxLite modifiers onto the bridge.
+	 *
+	 * These are the only modifiers that read and write bridge state instead of per note data, so
+	 * they are resolved here rather than through the note pipeline. Every modifier is called every
+	 * frame, including while it is off, because that is what lets a modifier snap the bridge back
+	 * to its defaults when it is stepped down.
+	 *
+	 * Resolved per frame rather than cached at construction so that `ModTable.add()` replacing one
+	 * of them mid song is picked up, the same as for any other modifier.
+	 */
+	/** `'fov=0', 'scale=0.001', ...`, for the camera modifier traces. */
+	function dumpSubValues(mod:Modifier):String {
+		var out = '';
+		for (name => sv in mod.subValues) {
+			if (out.length > 0)
+				out += ', ';
+			out += name + '=' + Std.string(sv.value);
+		}
+		return '[' + out + ']';
+	}
+
+	function applyFoxLiteModifiers() {
+		var totalFovOffset:Float = 0;
+		var totalZScale:Float = DepthModifier.BASE_SCALE;
+		var totalZOffset:Float = DepthModifier.BASE_OFFSET;
+		var totalTiltX:Float = 0;
+		var totalTiltY:Float = 0;
+		var totalTiltZ:Float = 0;
+		var totalCamX:Float = 0;
+		var totalCamY:Float = 0;
+		var totalCamZ:Float = 0;
+		var totalPivotX:Float = 0;
+		var totalPivotY:Float = 0;
+		var totalPivotZ:Float = 0;
+
+		var hasCustomZScale:Bool = false;
+		var activeFovCount:Int = 0;
+		var activeTiltCount:Int = 0;
+		var activeDepthCount:Int = 0;
+
+		for (mod in modifierTable.modifiers) {
+			var fovMod = Std.downcast(mod, FovModifier);
+			if (fovMod != null && fovMod.isActive()) {
+				totalFovOffset += fovMod.getFovOffset();
+				activeFovCount++;
+			}
+
+			var depthMod = Std.downcast(mod, DepthModifier);
+			if (depthMod != null && depthMod.isActive()) {
+				var scale = depthMod.getZScale();
+				if (!hasCustomZScale) {
+					totalZScale = scale;
+					hasCustomZScale = true;
+				} else {
+					totalZScale *= (scale / DepthModifier.BASE_SCALE);
+				}
+				totalZOffset += depthMod.getZOffset();
+				activeDepthCount++;
+			}
+
+			var tiltMod = Std.downcast(mod, TiltModifier);
+			if (tiltMod != null && tiltMod.isActive()) {
+				totalTiltX += tiltMod.getTiltX();
+				totalTiltY += tiltMod.getTiltY();
+				totalTiltZ += tiltMod.getTiltZ();
+				activeTiltCount++;
+			}
+
+			var camPosMod = Std.downcast(mod, CamPosModifier);
+			if (camPosMod != null && camPosMod.isActive()) {
+				totalCamX += camPosMod.getCamX();
+				totalCamY += camPosMod.getCamY();
+				totalCamZ += camPosMod.getCamZ();
+			}
+
+			var pivotPosMod = Std.downcast(mod, PivotPosModifier);
+			if (pivotPosMod != null && pivotPosMod.isActive()) {
+				totalPivotX += pivotPosMod.getPivotX();
+				totalPivotY += pivotPosMod.getPivotY();
+				totalPivotZ += pivotPosMod.getPivotZ();
+			}
+		}
+
+		if (!foxReportedScan) {
+			foxReportedScan = true;
+			trace('[modcharting-tools] FoxLite escaneo de modifiers de camara activos: FovCount=' + activeFovCount + ' DepthCount=' + activeDepthCount + ' TiltCount='
+				+ activeTiltCount + ' (total en tabla: ' + Lambda.count(modifierTable.modifiers) + ')');
+		}
+
+		foxBridge.fovOffset = totalFovOffset;
+		foxBridge.zScale = totalZScale;
+		foxBridge.zOffset = totalZOffset;
+		foxBridge.camera.position.setTo(totalCamX, totalCamY, foxBridge.camera.position.z + totalCamZ);
+		foxBridge.pivot.position.setTo(totalPivotX, totalPivotY, totalPivotZ);
+		foxBridge.setTilt(totalTiltX, totalTiltY, totalTiltZ);
+
+		var applied = 'fovOffset=' + Std.string(foxBridge.fovOffset) + ' zScale=' + Std.string(foxBridge.zScale) + ' zOffset=' + Std.string(foxBridge.zOffset) + ' tilt=('
+			+ Std.string(totalTiltX) + ', ' + Std.string(totalTiltY) + ', ' + Std.string(totalTiltZ) + ')';
+		if (applied != foxLastApplied) {
+			foxLastApplied = applied;
+			trace('[modcharting-tools] *** FoxLite CAMARA ACTUALIZADA *** -> ' + applied);
+		}
+	}
+	#end
+
+	function drawSustainAsSprite(noteData:NotePositionData) {
+		var daNote = notes.members[noteData.index];
+
+		var changeX:Bool = noteData.z != 0;
+		var thisNotePos:Vector3D;
+		if (changeX) {
+			_vec3b.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
+				noteData.y + (daNote.height / 2), noteData.z * 0.001);
+			thisNotePos = ModchartUtil.calculatePerspective(_vec3b,
+				ModchartUtil.defaultFOV * (Math.PI / 180),
+				-(daNote.width / 2),
+				-(daNote.height / 2));
+		} else {
+			_vec3.setTo(noteData.x, noteData.y, 0);
+			thisNotePos = _vec3;
+		}
+
+		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+		var isHoldEnd = animName.endsWith("end");
+
+		if (!isHoldEnd) {
+			if (!changeX)
+				thisNotePos.x += daNote.width;
+
+			noteData.scaleY *= Conductor.stepCrochet / 100 * Note.SCALE_MULT * daNote.speed;
 		}
 
 		noteData.x = thisNotePos.x;
@@ -438,7 +782,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		if (noteData.alpha <= 0.001 || !visible || alpha <= 0.001)
 			return;
 		if(utilities.Options.getData("optimizedModcharts")){
-			drawNote(noteData);
+			drawSustainAsSprite(noteData);
 			return;
 		}
 		var daNote = notes.members[noteData.index];
@@ -454,7 +798,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var songSpeed = daNote.speed;
 		var lane = noteData.lane;
 
-		// makes the sustain match the center of the parent note when at weird angles
 		var yOffsetThingy = (NoteMovement.arrowSizes[lane] / 2);
 
 		_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
@@ -466,8 +809,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		var timeToNextSustain = ModchartUtil.getFakeCrochet() / 4;
 		if (noteData.noteDist < 0)
-			timeToNextSustain *= -1; // weird shit that fixes upscroll lol
-		// timeToNextSustain = -ModchartUtil.getFakeCrochet()/4; //weird shit that fixes upscroll lol
+			timeToNextSustain *= -1;
 
 		var nextHalfNotePos:NotePositionData;
 		var nextNotePos:NotePositionData;
@@ -507,13 +849,16 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				var zoomEffect = 1.0 - noteData.cameraZoom;
 				if (zoomEffect > 0) {
 					var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
-					for (i in 0...daNote.mesh.vertices.length) {
-						if (i % 2 == 0) {
-							daNote.mesh.vertices[i] = (daNote.mesh.vertices[i] - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
-						} else {
-							daNote.mesh.vertices[i] = (daNote.mesh.vertices[i] - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
+					var verts = daNote.mesh.vertices;
+						var halfW = flixel.FlxG.width * 0.5;
+						var halfH = flixel.FlxG.height * 0.5;
+						for (i in 0...verts.length) {
+							if (i % 2 == 0) {
+								verts[i] = (verts[i] - halfW) * targetZoom + halfW;
+							} else {
+								verts[i] = (verts[i] - halfH) * targetZoom + halfH;
+							}
 						}
-					}
 				}
 			}
 
@@ -535,7 +880,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
             if (!noteData.isStrum && notes.members[noteData.index].isSustainNote)
                 drawSustainNote(noteData);
         }
-
         for (noteData in notePositions) {
             if (!noteData.isStrum && !notes.members[noteData.index].isSustainNote)
                 drawNote(noteData);
@@ -544,7 +888,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 	public function getSustainPoint(noteData:NotePositionData, timeOffset:Float):NotePositionData {
 		var daNote:Note = notes.members[noteData.index];
-		var songSpeed:Float = notes.members[noteData.index].speed;
+		var songSpeed:Float = daNote.speed;
 		var lane:Int = noteData.lane;
 		var pf:Int = noteData.playfieldIndex;
 
@@ -558,12 +902,9 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		noteDist = modifierTable.applyNoteDistMods(noteDist, lane, pf);
 		var incomingAngle:Array<Float> = modifierTable.applyIncomingAngleMods(lane, curPos, pf);
 		if (noteDist < 0)
-			incomingAngle[0] += 180; // make it match for both scrolls
-		// get the general note path for the next note
+			incomingAngle[0] += 180;
 		NoteMovement.setNotePath(daNote, lane, songSpeed, curPos, noteDist, incomingAngle[0], incomingAngle[1]);
-		// save the position data
 		var noteData = createDataFromNote(noteData.index, pf, curPos, noteDist, incomingAngle);
-		// add offsets to data with modifiers
 		modifierTable.applyNoteMods(noteData, lane, curPos, pf);
 		var yOffsetThingy = (NoteMovement.arrowSizes[lane] / 2);
 		_vec3b.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
@@ -582,10 +923,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 	public function getCorrectScrollSpeed() {
 		if (inEditor)
-			return PlayState.SONG.speed; // just use this while in editor so the instance shit works
-		else
-			return ModchartUtil.getScrollSpeed(playStateInstance);
-		return 1.0;
+			return PlayState.SONG.speed;
+		return ModchartUtil.getScrollSpeed(playStateInstance);
 	}
 
 	public function createTween(Object:Dynamic, Values:Dynamic, Duration:Float, ?Options:TweenOptions):FlxTween {
@@ -613,12 +952,33 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	}
 
 	override public function destroy() {
+		#if MODCHART_FOXLITE
+		if (foxBridge != null) {
+			foxBridge.destroy();
+			foxBridge = null;
+		}
+		#end
+		if (tweenManager != null) {
+			tweenManager.destroy();
+			tweenManager = null;
+		}
+		if (timerManager != null) {
+			timerManager.destroy();
+			timerManager = null;
+		}
+		if (eventManager != null) {
+			eventManager.clearEvents();
+			eventManager = null;
+		}
 		if (modchart != null) {
 			#if hscript
-			for (customMod in modchart.customModifiers) {
-				customMod.destroy(); // make sure the interps are dead
+			if (modchart.customModifiers != null) {
+				for (customMod in modchart.customModifiers) {
+					if (customMod != null) customMod.destroy();
+				}
 			}
 			#end
+			modchart = null;
 		}
 		super.destroy();
 	}

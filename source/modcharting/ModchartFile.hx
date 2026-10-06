@@ -404,13 +404,51 @@ class ModchartFile {
 				var fullArgsStr:String = i[EVENT_DATA][EVENT_EASEDATA];
 				var args = fullArgsStr.trim().replace(' ', '').split(',');
 				var pairCount = Math.floor(args.length / 2);
-				var easeTime:Float = Std.parseFloat(i[EVENT_DATA][EVENT_EASETIME]);
-				if (Math.isNaN(easeTime)) easeTime = 1;
+
+				// ease time can be comma-separated (one per modifier pair)
+				var rawEaseTime:Dynamic = i[EVENT_DATA][EVENT_EASETIME];
+				var easeTimes:Array<Float> = [];
+				if (Std.isOfType(rawEaseTime, String)) {
+					var etStr:String = rawEaseTime;
+					if (etStr.indexOf(",") != -1) {
+						for (et in etStr.split(",")) {
+							var parsed = Std.parseFloat(et.trim());
+							if (!Math.isNaN(parsed))
+								easeTimes.push(parsed);
+						}
+					} else {
+						var parsed = Std.parseFloat(etStr);
+						if (!Math.isNaN(parsed))
+							easeTimes.push(parsed);
+					}
+				} else {
+					var parsed:Float = rawEaseTime;
+					if (!Math.isNaN(parsed))
+						easeTimes.push(parsed);
+				}
+				if (easeTimes.length == 0) easeTimes.push(1);
+
+				// ease function can also be comma-separated (one per modifier pair)
+				var rawEaseFunc:Dynamic = i[EVENT_DATA][EVENT_EASE];
+				var easeFuncs:Array<String> = [];
+				if (Std.isOfType(rawEaseFunc, String)) {
+					var efStr:String = rawEaseFunc;
+					if (efStr.indexOf(",") != -1) {
+						for (ef in efStr.split(","))
+							easeFuncs.push(ef.trim());
+					} else {
+						easeFuncs.push(efStr);
+					}
+				}
+				if (easeFuncs.length == 0) easeFuncs.push("linear");
+
 				for (p in 0...pairCount) {
 					var pairTime = times.length > p ? times[p] : times[times.length - 1];
+					var pairEaseTime = easeTimes.length > p ? easeTimes[p] : easeTimes[easeTimes.length - 1];
+					var pairEase = easeFuncs.length > p ? easeFuncs[p] : easeFuncs[easeFuncs.length - 1];
 					var pairData = args[p * 2] + "," + args[p * 2 + 1];
-					ModchartFuncs.ease(pairTime, easeTime,
-						i[EVENT_DATA][EVENT_EASE], pairData, renderer.instance);
+					ModchartFuncs.ease(pairTime, pairEaseTime,
+						pairEase, pairData, renderer.instance);
 				}
 			case "set":
 				var fullArgsStr:String = i[EVENT_DATA][EVENT_SETDATA];

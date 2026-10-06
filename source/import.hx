@@ -1,3 +1,16 @@
+// `!macro` is load bearing, not defensive. This file sits at the root of the classpath, so Haxe
+// types it in the macro context too, and these imports reach the whole engine
+// (`states.PlayState` -> `Popup` -> `AwardsState` -> `utilities.DiscordClient` -> `cpp.ConstCharStar`).
+// The `cpp` package is not accessible from a macro, so a single macro on the command line used to
+// take the build down with errors pointing at engine files nobody was editing. It also dragged
+// flixel-ui into the macro context, where its secondary types (`FlxGraphicAsset`,
+// `FlxUITooltipStyle`) failed to resolve and buried the real error.
+//
+// The guard wraps the whole file rather than sitting on the engine `#if` chain, because `#else`
+// and `#elseif` are still reached when the `#if` above them fails, and guarding only the first
+// branch just moves the same errors to whichever branch runs under `macro`. The darks engine's own
+// `source/import.hx` opens with the same `#if !macro`.
+#if !macro
 #if LEATHER
 import states.PlayState;
 import game.SongLoader;
@@ -49,4 +62,5 @@ import psychlua.HScript as FunkinHScript;
 #if sys
 import sys.FileSystem;
 import sys.io.File;
+#end
 #end

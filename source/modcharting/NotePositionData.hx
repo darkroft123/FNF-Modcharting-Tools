@@ -53,11 +53,11 @@ class NotePositionData implements IFlxDestroyable {
 	}
 
 
-		public static function recycle(data:NotePositionData):Void {
+	public inline static function recycle(data:NotePositionData):Void {
 		pool.put(data);
 	}
 
-	public function setupStrum(
+	public inline function setupStrum(
 		x:Float,
 		y:Float,
 		z:Float,
@@ -107,7 +107,7 @@ class NotePositionData implements IFlxDestroyable {
 		this.cameraZoom = 1.0;
 	}
 
-	public function setupNote(
+	public inline function setupNote(
 		x:Float,
 		y:Float,
 		z:Float,

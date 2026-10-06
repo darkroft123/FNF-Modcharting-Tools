@@ -2251,8 +2251,6 @@ class RingModifier extends Modifier {
 }
 
 class TrailModifier extends Modifier {
-	var skipCounter:Int = 0;
-
 	override function setupSubValues() {
 		subValues.set('segments', new ModifierSubValue(4.0));
 		subValues.set('spacing', new ModifierSubValue(15.0));
@@ -2262,9 +2260,6 @@ class TrailModifier extends Modifier {
 
 	override function gatherExtraNoteData(pf:Int):Array<NotePositionData> {
 		if (currentValue == baseValue || renderer == null) return null;
-
-		skipCounter++;
-		if (skipCounter % 3 != 0) return null;
 
 		var extra:Array<NotePositionData> = [];
 		var segCount = Std.int(Math.max(subValues.get('segments').value, 1));
@@ -2519,3 +2514,313 @@ class InfiniteFormModifier extends Modifier {
 		infinityMath(noteData, lane, 0, pf, true);
 	}
 }
+
+/**
+ * Modifiers that steer the whole playfield camera instead of per note data.
+ *
+ * The regular modifier pipeline drives `noteMath` / `strumMath` once per note, which is the wrong
+ * shape for camera state: FOV, depth and tilt are properties of the entire playfield, so writing
+ * them N times per frame is wasted work and any ordering dependence becomes a bug. These therefore
+ * leave the per note hooks empty and expose plain getters instead, which `PlayfieldRenderer` reads
+ * once per frame.
+ *
+ * Deliberately free of any reference to the 3D bridge. That type only exists under
+ * `-D MODCHART_FOXLITE` and drags in the external `foxlite` haxelib, so a signature that took it
+ * would take the whole optional dependency along and stop these modifiers from existing in a
+ * classic build. Keeping them as plain data is what lets them sit in the editor dropdown
+ * unconditionally: they load and save in every chart, and only take effect once the 3D renderer is
+ * compiled in.
+ *
+ * `currentValue` and `subValues` are still driven by the normal modchart event system, so they
+ * interpolate and can be stepped like any other modifier.
+ */
+@:keep class FovModifier extends Modifier {
+	public static inline var TAG:String = 'fov';
+
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+		trace('[modcharting-tools] FovModifier creado: tag="' + tag + '" type=' + Std.string(type) + ' playfield=' + Std.string(playfield) + ' currentValue='
+			+ Std.string(currentValue));
+	}
+
+	override function setupSubValues() {
+		subValues.set('fov', new ModifierSubValue(0.0));
+		baseValue = 0.0;
+		currentValue = 0.0;
+	}
+
+	public inline function isActive():Bool {
+		return currentValue != baseValue || (subValues.get('fov') != null && subValues.get('fov').value != 0);
+	}
+
+	/** Degrees to add to the default FOV, or 0 when the modifier is off. */
+	public inline function getFovOffset():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('fov').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		var res = (sub != 0) ? sub * mult : currentValue;
+		trace('[modcharting-tools] FovModifier.getFovOffset() -> ' + res + ' (tag="' + tag + '", currentValue=' + currentValue + ', subFov=' + sub + ')');
+		return res;
+	}
+}
+
+/**
+ * Controls how far notes travel into the screen.
+ *
+ * Sub values: `scale` (multiplier on note Z; the bridge default is `0.001`) and `offset` (constant
+ * depth shift applied after scaling).
+ *
+ * Positive `scale` pushes notes away from the camera, matching the sign of the `z` modifier the
+ * classic renderer already uses.
+ */
+@:keep class DepthModifier extends Modifier {
+	public static inline var TAG:String = 'depth';
+
+	/** Must stay in sync with the defaults in `FoxPlayfieldBridge`. */
+	public static inline var BASE_SCALE:Float = 0.001;
+	public static inline var BASE_OFFSET:Float = 0;
+
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+		trace('[modcharting-tools] DepthModifier creado: tag="' + tag + '" type=' + Std.string(type) + ' playfield=' + Std.string(playfield)
+			+ ' currentValue=' + Std.string(currentValue));
+	}
+
+	override function setupSubValues() {
+		subValues.set('scale', new ModifierSubValue(BASE_SCALE));
+		subValues.set('offset', new ModifierSubValue(BASE_OFFSET));
+		baseValue = 1.0;
+		currentValue = 1.0;
+	}
+
+	public inline function isActive():Bool {
+		return currentValue != baseValue || subValues.get('scale').value != BASE_SCALE || subValues.get('offset').value != BASE_OFFSET;
+	}
+
+	/** Multiplier on note Z, falling back to the bridge default when the modifier is off. */
+	public inline function getZScale():Float {
+		if (!isActive()) return BASE_SCALE;
+		var sub = subValues.get('scale').value;
+		var scaleMult = (sub == BASE_SCALE) ? 1.0 : (sub > 0.5 ? sub * BASE_SCALE : sub);
+		var valMult = (currentValue != 0) ? currentValue : 1.0;
+		var res = scaleMult * valMult;
+		trace('[modcharting-tools] DepthModifier.getZScale() -> ' + res + ' (tag="' + tag + '", currentValue=' + currentValue + ')');
+		return res;
+	}
+
+	/** Constant depth shift, falling back to the bridge default when the modifier is off. */
+	public inline function getZOffset():Float {
+		if (!isActive()) return BASE_OFFSET;
+		var sub = subValues.get('offset').value;
+		var res = (sub != 0) ? sub * (currentValue != 0 ? currentValue : 1.0) : currentValue;
+		if (res != 0) trace('[modcharting-tools] DepthModifier.getZOffset() -> ' + res + ' (tag="' + tag + '", currentValue=' + currentValue + ')');
+		return res;
+	}
+}
+
+/**
+ * Rotates the whole playfield.
+ *
+ * Sub values: `x`, `y` and `z`, in degrees. These are pushed onto the playfield pivot, which every
+ * note and strum is parented to, so the whole field leans at once. Read as absolutes rather than
+ * accumulated by the renderer, because these are the only writers and an additive form would
+ * compound once per frame.
+ */
+@:keep class TiltModifier extends Modifier {
+	public static inline var TAG:String = 'tilt';
+
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+		trace('[modcharting-tools] TiltModifier creado: tag="' + tag + '" type=' + Std.string(type) + ' playfield=' + Std.string(playfield)
+			+ ' currentValue=' + Std.string(currentValue));
+	}
+
+	override function setupSubValues() {
+		subValues.set('x', new ModifierSubValue(0.0));
+		subValues.set('y', new ModifierSubValue(0.0));
+		subValues.set('z', new ModifierSubValue(0.0));
+		baseValue = 0.0;
+		currentValue = 0.0;
+	}
+
+	public inline function isActive():Bool {
+		return currentValue != baseValue || (subValues.get('x').value != 0 || subValues.get('y').value != 0 || subValues.get('z').value != 0);
+	}
+
+	public inline function getTiltX():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('x').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		var res = (sub != 0) ? sub * mult : currentValue;
+		trace('[modcharting-tools] TiltModifier.getTiltX() -> ' + res + ' (tag="' + tag + '", currentValue=' + currentValue + ', subX=' + sub + ')');
+		return res;
+	}
+
+	public inline function getTiltY():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('y').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		var res = (sub != 0) ? sub * mult : 0;
+		if (res != 0) trace('[modcharting-tools] TiltModifier.getTiltY() -> ' + res + ' (tag="' + tag + '", currentValue=' + currentValue + ')');
+		return res;
+	}
+
+	public inline function getTiltZ():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('z').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		var res = (sub != 0) ? sub * mult : 0;
+		if (res != 0) trace('[modcharting-tools] TiltModifier.getTiltZ() -> ' + res + ' (tag="' + tag + '", currentValue=' + currentValue + ')');
+		return res;
+	}
+}
+
+/** Standalone X-axis GPU Note 3D Rotation Modifier */
+@:keep class RotateXModifier extends Modifier {
+	public static inline var TAG:String = 'rotateX';
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+	}
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteData.angleX += currentValue;
+	}
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.angleX += currentValue;
+	}
+}
+
+/** Standalone Y-axis GPU Note 3D Rotation Modifier */
+@:keep class RotateYModifier extends Modifier {
+	public static inline var TAG:String = 'rotateY';
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+	}
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteData.angleY += currentValue;
+	}
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.angleY += currentValue;
+	}
+}
+
+/** Standalone Z-axis GPU Note 3D Rotation Modifier */
+@:keep class RotateZModifier extends Modifier {
+	public static inline var TAG:String = 'rotateZ';
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+	}
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteData.angleZ += currentValue;
+	}
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.angleZ += currentValue;
+	}
+}
+
+/** Standalone X-axis GPU Strum Target 3D Rotation Modifier */
+@:keep class StrumRotateXModifier extends Modifier {
+	public static inline var TAG:String = 'strumRotateX';
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+	}
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.angleX += currentValue;
+	}
+}
+
+/** Standalone Y-axis GPU Strum Target 3D Rotation Modifier */
+@:keep class StrumRotateYModifier extends Modifier {
+	public static inline var TAG:String = 'strumRotateY';
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+	}
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.angleY += currentValue;
+	}
+}
+
+/** Standalone Z-axis GPU Strum Target 3D Rotation Modifier */
+@:keep class StrumRotateZModifier extends Modifier {
+	public static inline var TAG:String = 'strumRotateZ';
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+	}
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.angleZ += currentValue;
+	}
+}
+
+/** Shifts the 3D camera position in world space. SubMods: x, y, z. */
+@:keep class CamPosModifier extends Modifier {
+	public static inline var TAG:String = 'campos';
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+	}
+	override function setupSubValues() {
+		subValues.set('x', new ModifierSubValue(0.0));
+		subValues.set('y', new ModifierSubValue(0.0));
+		subValues.set('z', new ModifierSubValue(0.0));
+		baseValue = 0.0;
+		currentValue = 0.0;
+	}
+	public inline function isActive():Bool {
+		return currentValue != baseValue || (subValues.get('x').value != 0 || subValues.get('y').value != 0 || subValues.get('z').value != 0);
+	}
+	public inline function getCamX():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('x').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		return (sub != 0) ? sub * mult : currentValue;
+	}
+	public inline function getCamY():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('y').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		return (sub != 0) ? sub * mult : 0;
+	}
+	public inline function getCamZ():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('z').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		return (sub != 0) ? sub * mult : 0;
+	}
+}
+
+/** Shifts the 3D playfield pivot origin in world space. SubMods: x, y, z. */
+@:keep class PivotPosModifier extends Modifier {
+	public static inline var TAG:String = 'pivotpos';
+	public function new(tag:String = TAG, ?type:ModifierType = ModifierType.ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+	}
+	override function setupSubValues() {
+		subValues.set('x', new ModifierSubValue(0.0));
+		subValues.set('y', new ModifierSubValue(0.0));
+		subValues.set('z', new ModifierSubValue(0.0));
+		baseValue = 0.0;
+		currentValue = 0.0;
+	}
+	public inline function isActive():Bool {
+		return currentValue != baseValue || (subValues.get('x').value != 0 || subValues.get('y').value != 0 || subValues.get('z').value != 0);
+	}
+	public inline function getPivotX():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('x').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		return (sub != 0) ? sub * mult : currentValue;
+	}
+	public inline function getPivotY():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('y').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		return (sub != 0) ? sub * mult : 0;
+	}
+	public inline function getPivotZ():Float {
+		if (!isActive()) return 0;
+		var sub = subValues.get('z').value;
+		var mult = (currentValue != 0) ? currentValue : 1.0;
+		return (sub != 0) ? sub * mult : 0;
+	}
+}
+
+
+
