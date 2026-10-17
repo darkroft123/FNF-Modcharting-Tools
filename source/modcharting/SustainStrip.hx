@@ -99,42 +99,42 @@ class SustainStrip extends FlxStrip
         }
 
         var thisScale = safeScale(thisNotePos.z) * noteData.scaleX;
-        var halfScale = safeScale(nextHalfNotePos.z) * noteData.scaleX;
+        var halfScale = safeScale(nextHalfNotePos.z) * nextHalfNotePos.scaleX;
         var nextScale = safeScale(nextNotePos.z) * nextNotePos.scaleX;
 
         if (flipGraphic)
         {
             cachedVerts[0] = nextNotePos.x;
-            cachedVerts[1] = nextNotePos.y;
+            cachedVerts[1] = nextNotePos.y + yOffset;
             cachedVerts[2] = nextNotePos.x+(daNote.frameWidth*nextScale);
-            cachedVerts[3] = nextNotePos.y;
+            cachedVerts[3] = nextNotePos.y + yOffset;
 
             cachedVerts[4] = nextHalfNotePos.x;
-            cachedVerts[5] = nextHalfNotePos.y;
+            cachedVerts[5] = nextHalfNotePos.y + yOffset;
             cachedVerts[6] = nextHalfNotePos.x+(daNote.frameWidth*halfScale);
-            cachedVerts[7] = nextHalfNotePos.y;
+            cachedVerts[7] = nextHalfNotePos.y + yOffset;
 
             cachedVerts[8] = thisNotePos.x;
-            cachedVerts[9] = thisNotePos.y;
+            cachedVerts[9] = thisNotePos.y + yOffset;
             cachedVerts[10] = thisNotePos.x+(daNote.frameWidth*thisScale);
-            cachedVerts[11] = thisNotePos.y;
+            cachedVerts[11] = thisNotePos.y + yOffset;
         }
         else 
         {
             cachedVerts[0] = thisNotePos.x;
-            cachedVerts[1] = thisNotePos.y;
+            cachedVerts[1] = thisNotePos.y + yOffset;
             cachedVerts[2] = thisNotePos.x+(daNote.frameWidth*thisScale);
-            cachedVerts[3] = thisNotePos.y;
+            cachedVerts[3] = thisNotePos.y + yOffset;
 
             cachedVerts[4] = nextHalfNotePos.x;
-            cachedVerts[5] = nextHalfNotePos.y;
+            cachedVerts[5] = nextHalfNotePos.y + yOffset;
             cachedVerts[6] = nextHalfNotePos.x+(daNote.frameWidth*halfScale);
-            cachedVerts[7] = nextHalfNotePos.y;
+            cachedVerts[7] = nextHalfNotePos.y + yOffset;
 
             cachedVerts[8] = nextNotePos.x;
-            cachedVerts[9] = nextNotePos.y;
+            cachedVerts[9] = nextNotePos.y + yOffset;
             cachedVerts[10] = nextNotePos.x+(daNote.frameWidth*nextScale);
-            cachedVerts[11] = nextNotePos.y;
+            cachedVerts[11] = nextNotePos.y + yOffset;
         }
         vertices = new DrawData(12, true, cachedVerts.copy());
     }

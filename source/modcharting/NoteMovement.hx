@@ -60,7 +60,8 @@ class NoteMovement
             #end
 
             defaultScale.push(s);
-            arrowSizes.push(160*s);
+            var frameSize:Float = (strum.frameWidth > 0) ? strum.frameWidth : 160;
+            arrowSizes.push(frameSize * s);
         }
         #if LEATHER
         leatherEngineOffsetStuff.clear();
@@ -95,7 +96,8 @@ class NoteMovement
             #end
 
             defaultScale.push(s);
-            arrowSizes.push(160*s);
+            var frameSize:Float = (strum.frameWidth > 0) ? strum.frameWidth : 160;
+            arrowSizes.push(frameSize * s);
         }
         #end
         #if LEATHER

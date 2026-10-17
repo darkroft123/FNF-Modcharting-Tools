@@ -473,21 +473,20 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var daNote = notes.members[noteData.index];
 
 		var changeX:Bool = noteData.z != 0;
-		var thisNotePos:openfl.geom.Vector3D;
-		if (changeX) {
-			_vec3b.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
-				noteData.y + (daNote.height / 2), noteData.z * 0.001);
-			thisNotePos = ModchartUtil.calculatePerspective(_vec3b,
-				ModchartUtil.defaultFOV * (Math.PI / 180),
-				-(daNote.width / 2),
-				-(daNote.height / 2));
-		} else {
-			_vec3.setTo(noteData.x, noteData.y, 0);
-			thisNotePos = _vec3;
-		}
 
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isHoldEnd = animName.endsWith("end");
+
+		// Use the exact same anchor as the mesh sustain body (offset by half an
+		// arrow and the per-skin X offset) so a sprite-drawn hold end lines up
+		// with the mesh body it caps instead of drifting off by half a note.
+		var lane:Int = noteData.lane;
+		var arrowSize:Float = (NoteMovement.arrowSizes.length > lane) ? NoteMovement.arrowSizes[lane] : daNote.height;
+		_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
+			noteData.y + (arrowSize / 2), noteData.z * 0.001);
+		var thisNotePos = ModchartUtil.calculatePerspective(_vec3,
+			ModchartUtil.defaultFOV * (Math.PI / 180),
+			-(daNote.width / 2), 0);
 
 		if (!isHoldEnd) {
 			noteData.scaleY *= sustainScaleMultiplier(daNote, noteData.lane);
@@ -525,13 +524,14 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var savedOffsetX = daNote.offset.x;
 		var savedOffsetY = daNote.offset.y;
 		daNote.mesh = null;
-		if (isHoldEnd)
-			daNote.offset.set(0, 0);
+		// The renderer drives position from noteData; the engine's note offset
+		// (centerOffsets on sustains, plus the skin y-offset) would otherwise
+		// shift the sprite off the mesh path. Match the mesh, which ignores it.
+		daNote.offset.set(0, 0);
 		if (noteData.hasColorFill) daNote.shader = null;
 		daNote.draw();
 		daNote.shader = savedNoteShader;
-		if (isHoldEnd)
-			daNote.offset.set(savedOffsetX, savedOffsetY);
+		daNote.offset.set(savedOffsetX, savedOffsetY);
 		daNote.mesh = tempMesh;
 
 		daNote.x = oldX;
@@ -577,8 +577,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		daNote.scrollFactor.set(0, 0);
 		daNote.mesh.scrollFactor.x = daNote.scrollFactor.x;
 		daNote.mesh.scrollFactor.y = daNote.scrollFactor.y;
-		daNote.alpha = noteData.alpha;
-		daNote.mesh.setColorTransform(noteData.redMultiplier, noteData.greenMultiplier, noteData.blueMultiplier, daNote.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
+		daNote.mesh.setColorTransform(noteData.redMultiplier, noteData.greenMultiplier, noteData.blueMultiplier, noteData.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
 
 		var songSpeed = daNote.speed;
 		var lane = noteData.lane;

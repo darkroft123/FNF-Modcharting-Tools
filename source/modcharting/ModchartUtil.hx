@@ -82,33 +82,15 @@ class ModchartUtil {
 		#if PSYCH
 		return daNote.offsetX;
 		#elseif LEATHER
-		// fuck
-		var offset:Float = 0;
-
 		var lane = daNote.noteData;
 		if (daNote.mustPress)
 			lane += NoteMovement.keyCount;
 		var strum = instance.playfieldRenderer.strumGroup.members[lane];
-
-		var arrayVal = Std.string([lane, daNote.arrow_Type, daNote.isSustainNote]);
-
-		if (!NoteMovement.leatherEngineOffsetStuff.exists(arrayVal)) {
-			var tempShit:Float = 0.0;
-
-			var targetX = NoteMovement.defaultStrumX[lane];
-			var xPos = targetX;
-			while (Std.int(xPos + (daNote.width / 2)) != Std.int(targetX + (strum.width / 2))) {
-				xPos += (xPos + daNote.width > targetX + strum.width ? -0.1 : 0.1);
-				tempShit += (xPos + daNote.width > targetX + strum.width ? -0.1 : 0.1);
-			}
-			// trace(arrayVal);
-			// trace(tempShit);
-
-			NoteMovement.leatherEngineOffsetStuff.set(arrayVal, tempShit);
-		}
-		offset = NoteMovement.leatherEngineOffsetStuff.get(arrayVal);
-
-		return offset;
+		if (strum == null)
+			return 0;
+		// Centers the note on its strum. Computed live instead of cached so that
+		// it stays correct when a skin or a scale modifier changes the widths.
+		return (strum.width - daNote.width) / 2;
 		#else
 		return (daNote.isSustainNote ? 37 : 0); // the magic number
 		#end
