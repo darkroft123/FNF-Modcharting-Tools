@@ -29,10 +29,12 @@ class SustainStrip extends FlxStrip
     public var daNote:Note;
     var cachedVerts:Array<Float> = [];
     public var loadedValidGraphic:Bool = false;
+    public var loadedFrame:Dynamic = null;
 
     public function updateGraphic(?force:Bool = false):Void {
         if (daNote == null) return;
-        if (!force && loadedValidGraphic && graphic != null && graphic.bitmap != null && graphic.bitmap.width > 1 && graphic.bitmap.height > 1)
+        var frameChanged:Bool = (daNote.frame != loadedFrame);
+        if (!force && !frameChanged && loadedValidGraphic && graphic != null && graphic.bitmap != null && graphic.bitmap.width > 1 && graphic.bitmap.height > 1)
             return;
 
         try {
@@ -47,6 +49,7 @@ class SustainStrip extends FlxStrip
             shader = daNote.shader;
             antialiasing = daNote.antialiasing;
             loadedValidGraphic = true;
+            loadedFrame = daNote.frame;
         }
         } catch (e:Dynamic) {}
     }

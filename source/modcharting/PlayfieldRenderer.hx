@@ -522,10 +522,16 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		var tempMesh = daNote.mesh;
 		var savedNoteShader = daNote.shader;
+		var savedOffsetX = daNote.offset.x;
+		var savedOffsetY = daNote.offset.y;
 		daNote.mesh = null;
+		if (isHoldEnd)
+			daNote.offset.set(0, 0);
 		if (noteData.hasColorFill) daNote.shader = null;
 		daNote.draw();
 		daNote.shader = savedNoteShader;
+		if (isHoldEnd)
+			daNote.offset.set(savedOffsetX, savedOffsetY);
 		daNote.mesh = tempMesh;
 
 		daNote.x = oldX;
