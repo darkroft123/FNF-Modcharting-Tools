@@ -608,6 +608,28 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			timeToNextSustain + 2.2) : getSustainPoint(noteData, timeToNextSustain - 2.2);
 		#end
 
+		// The engine never stretches the hold end to a segment: only the hold
+		// pieces get their scale.y baked by `applySustainHeight`, so the end keeps
+		// the cap's own size. The strip above spans a full step, which would stretch
+		// the cap (and fake the hold's precision); shrink it to the cap's height
+		// while keeping the per-vertex perspective/3D.
+		//
+		// `applySustainHeight` sizes a hold piece so its height equals
+		// `0.45 * segMs * speed`; inverting that gives the fraction of a step the
+		// natural cap fills, which is unit-free and matches the engine.
+		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+		if (animName.endsWith("end")) {
+			var stepLen = 0.45 * Math.abs(timeToNextSustain) * Math.abs(daNote.speed);
+			var capLen = daNote.frameHeight * noteData.scaleY;
+			if (stepLen > 0.0001 && capLen > 0.0001) {
+				var capTime = timeToNextSustain * (capLen / stepLen);
+				NotePositionData.recycle(nextHalfNotePos);
+				NotePositionData.recycle(nextNotePos);
+				nextHalfNotePos = getSustainPoint(noteData, capTime * 0.5);
+				nextNotePos = getSustainPoint(noteData, capTime);
+			}
+		}
+
 		var flipGraphic = false;
 
 		// mod/bound to 360, add 360 for negative angles, mod again just in case
