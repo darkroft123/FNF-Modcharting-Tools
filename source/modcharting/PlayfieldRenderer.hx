@@ -477,16 +477,21 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isHoldEnd = animName.endsWith("end");
 
-		// Use the exact same anchor as the mesh sustain body (offset by half an
-		// arrow and the per-skin X offset) so a sprite-drawn hold end lines up
-		// with the mesh body it caps instead of drifting off by half a note.
-		var lane:Int = noteData.lane;
-		var arrowSize:Float = (NoteMovement.arrowSizes.length > lane) ? NoteMovement.arrowSizes[lane] : daNote.height;
-		_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
-			noteData.y + (arrowSize / 2), noteData.z * 0.001);
-		var thisNotePos = ModchartUtil.calculatePerspective(_vec3,
-			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(daNote.width / 2), 0);
+		// Sprite-drawn sustains (hold ends, or everything with optimized
+		// modcharts) are not stretched, so they sit at the note's own position
+		// just like a normal note. The engine note offset is neutralized below.
+		var thisNotePos:openfl.geom.Vector3D;
+		if (changeX) {
+			_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
+				noteData.y + (daNote.height / 2), noteData.z * 0.001);
+			thisNotePos = ModchartUtil.calculatePerspective(_vec3,
+				ModchartUtil.defaultFOV * (Math.PI / 180),
+				-(daNote.width / 2),
+				-(daNote.height / 2));
+		} else {
+			_vec3.setTo(noteData.x, noteData.y, 0);
+			thisNotePos = _vec3;
+		}
 
 		if (!isHoldEnd) {
 			noteData.scaleY *= sustainScaleMultiplier(daNote, noteData.lane);
@@ -525,8 +530,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var savedOffsetY = daNote.offset.y;
 		daNote.mesh = null;
 		// The renderer drives position from noteData; the engine's note offset
-		// (centerOffsets on sustains, plus the skin y-offset) would otherwise
-		// shift the sprite off the mesh path. Match the mesh, which ignores it.
+		// (centerOffsets on sustains) would otherwise shift the sprite off the
+		// note's own position.
 		daNote.offset.set(0, 0);
 		if (noteData.hasColorFill) daNote.shader = null;
 		daNote.draw();
