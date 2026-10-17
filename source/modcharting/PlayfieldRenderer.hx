@@ -477,9 +477,9 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isHoldEnd = animName.endsWith("end");
 
-		// Sprite-drawn sustains (hold ends, or everything with optimized
-		// modcharts) are not stretched, so they sit at the note's own position
-		// just like a normal note. The engine note offset is neutralized below.
+		// Sprite-drawn sustains (optimized modcharts, or the mesh fallback) are
+		// not stretched, so they sit at the note's own position just like a
+		// normal note. The engine note offset is neutralized below.
 		var thisNotePos:openfl.geom.Vector3D;
 		if (changeX) {
 			_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
@@ -554,12 +554,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		}
 		var daNote = notes.members[noteData.index];
 		if (daNote == null) return;
-
-		var sustainAnim:String = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
-		if (sustainAnim.endsWith("end")) {
-			drawSustainAsSprite(noteData);
-			return;
-		}
 
 		var meshValid:Bool = true;
 		try {
