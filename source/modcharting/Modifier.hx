@@ -3,12 +3,15 @@ package modcharting;
 import flixel.tweens.FlxEase;
 import flixel.math.FlxMath;
 import flixel.FlxG;
+import flixel.FlxObject;
+import flixel.util.FlxColor;
 #if LEATHER
 import states.PlayState;
 import game.Note;
 import game.StrumNote;
 import game.Conductor;
 import utilities.CoolUtil;
+import modding.scripts.languages.LuaScript;
 #elseif (PSYCH && PSYCHVERSION >= "0.7")
 import states.PlayState;
 import objects.Note;
@@ -43,6 +46,9 @@ class TimeVector extends Vector4 {
 class ModifierSubValue {
 	public var value:Float = 0.0;
 	public var baseValue:Float = 0.0;
+	// Optional string sidecar: lets a subvalue carry an id/name instead of a
+	// number (e.g. CameraModifier's "layer" accepts an object id like "gf").
+	public var name:String = null;
 
 	public function new(value:Float) {
 		this.value = value;
@@ -66,6 +72,9 @@ class Modifier {
 
 	public var notes:FlxTypedGroup<Note>;
 
+	// reusable scratch so getIncomingAngle stops allocating a new [0,0] per call
+	public var _incomingAngleScratch:Array<Float> = [0, 0];
+
 	public function new(tag:String, ?type:ModifierType = ALL, ?playfield:Int = -1) {
 		this.tag = tag;
 		this.type = type;
@@ -88,9 +97,19 @@ class Modifier {
 
 	public function getIncomingAngle(lane:Int, curPos:Float, pf:Int):Array<Float> {
 		if (currentValue != baseValue) {
-			return incomingAngleMath(lane, curPos, pf);
+			var r = incomingAngleMath(lane, curPos, pf);
+			if (r != null) {
+				_incomingAngleScratch[0] = r[0];
+				_incomingAngleScratch[1] = r[1];
+			} else {
+				_incomingAngleScratch[0] = 0;
+				_incomingAngleScratch[1] = 0;
+			}
+		} else {
+			_incomingAngleScratch[0] = 0;
+			_incomingAngleScratch[1] = 0;
 		}
-		return [0, 0];
+		return _incomingAngleScratch;
 	}
 
 	// cur pos is how close the note is to the strum, need to edit for boost and accel
@@ -2193,6 +2212,206 @@ class ColorTransformBlue extends Modifier {
 	}
 }
 
+class ColorTransformRainbowModifier extends Modifier {
+	override function setupSubValues() {
+		subValues.set('speed', new ModifierSubValue(1.0));
+		subValues.set('spread', new ModifierSubValue(35.0));
+	}
+
+	function getRainbowColor(lane:Int, curPos:Float):FlxColor {
+		var songMult = states.PlayState.songMultiplier;
+		if (songMult == 0) songMult = 1.0;
+		var spd = subValues.get('speed').value * songMult;
+		var spread = subValues.get('spread').value;
+		var hue = ((Conductor.songPosition * 0.001 * spd * 180.0) + (lane * spread)) % 360.0;
+		if (hue < 0) hue += 360.0;
+		return FlxColor.fromHSB(hue, 1.0, 1.0);
+	}
+
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		if (currentValue == 0) return;
+		var mult = (currentValue > 1.0) ? (currentValue / 255.0) : currentValue;
+		var col = getRainbowColor(lane, curPos);
+		noteData.redOffset += col.red * mult;
+		noteData.greenOffset += col.green * mult;
+		noteData.blueOffset += col.blue * mult;
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		if (currentValue == 0) return;
+		var mult = (currentValue > 1.0) ? (currentValue / 255.0) : currentValue;
+		var col = getRainbowColor(lane, 0);
+		noteData.redOffset += col.red * mult;
+		noteData.greenOffset += col.green * mult;
+		noteData.blueOffset += col.blue * mult;
+	}
+}
+class ColorTransformRainbow extends ColorTransformRainbowModifier {}
+
+class ColorFillRed extends Modifier {
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteData.hasColorFill = true;
+		noteData.colorFillR += currentValue;
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.hasColorFill = true;
+		noteData.colorFillR += currentValue;
+	}
+}
+
+class ColorFillGreen extends Modifier {
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteData.hasColorFill = true;
+		noteData.colorFillG += currentValue;
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.hasColorFill = true;
+		noteData.colorFillG += currentValue;
+	}
+}
+
+class ColorFillBlue extends Modifier {
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteData.hasColorFill = true;
+		noteData.colorFillB += currentValue;
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.hasColorFill = true;
+		noteData.colorFillB += currentValue;
+	}
+}
+
+class ColorFillAlpha extends Modifier {
+	override public function getNotePath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteMath(noteData, lane, curPos, pf);
+	}
+
+	override public function getStrumPath(noteData:NotePositionData, lane:Int, pf:Int) {
+		strumMath(noteData, lane, pf);
+	}
+
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteData.hasColorFill = true;
+		noteData.colorFillAlpha = currentValue;
+		noteData.colorFillAlphaExplicit = true;
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		noteData.hasColorFill = true;
+		noteData.colorFillAlpha = currentValue;
+		noteData.colorFillAlphaExplicit = true;
+	}
+}
+
+class ColorFillModifier extends Modifier {
+	override function setupSubValues() {
+		subValues.set('r', new ModifierSubValue(0.0));
+		subValues.set('g', new ModifierSubValue(0.0));
+		subValues.set('b', new ModifierSubValue(0.0));
+		subValues.set('alpha', new ModifierSubValue(1.0));
+	}
+
+	override public function getNotePath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		noteMath(noteData, lane, curPos, pf);
+	}
+
+	override public function getStrumPath(noteData:NotePositionData, lane:Int, pf:Int) {
+		strumMath(noteData, lane, pf);
+	}
+
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		applyColorFill(noteData);
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		applyColorFill(noteData);
+	}
+
+	function applyColorFill(noteData:NotePositionData):Void {
+		var a = subValues.get('alpha').value;
+		var r = subValues.get('r').value;
+		var g = subValues.get('g').value;
+		var b = subValues.get('b').value;
+
+		if (currentValue == baseValue && r == 0 && g == 0 && b == 0) return;
+		if (a <= 0) {
+			noteData.colorFillAlpha = 0;
+			noteData.colorFillAlphaExplicit = true;
+			return;
+		}
+
+		var finalAlpha = (currentValue != baseValue) ? (currentValue * a) : a;
+		if (finalAlpha <= 0) {
+			noteData.colorFillAlpha = 0;
+			noteData.colorFillAlphaExplicit = true;
+			return;
+		}
+
+		noteData.hasColorFill = true;
+		noteData.colorFillR += r;
+		noteData.colorFillG += g;
+		noteData.colorFillB += b;
+		noteData.colorFillAlpha = finalAlpha;
+		noteData.colorFillAlphaExplicit = true;
+	}
+}
+
+class ColorFillRainbowModifier extends Modifier {
+	override function setupSubValues() {
+		subValues.set('speed', new ModifierSubValue(1.0));
+		subValues.set('spread', new ModifierSubValue(35.0));
+		subValues.set('alpha', new ModifierSubValue(1.0));
+	}
+
+	function getRainbowColor(lane:Int, curPos:Float):FlxColor {
+		var songMult = states.PlayState.songMultiplier;
+		if (songMult == 0) songMult = 1.0;
+		var spd = subValues.get('speed').value * songMult;
+		var spread = subValues.get('spread').value;
+		var hue = ((Conductor.songPosition * 0.001 * spd * 180.0) + (lane * spread)) % 360.0;
+		if (hue < 0) hue += 360.0;
+		return FlxColor.fromHSB(hue, 1.0, 1.0);
+	}
+
+	override public function getNotePath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		if (currentValue != baseValue) {
+			noteMath(noteData, lane, curPos, pf);
+		}
+	}
+
+	override public function getStrumPath(noteData:NotePositionData, lane:Int, pf:Int) {
+		if (currentValue != baseValue) {
+			strumMath(noteData, lane, pf);
+		}
+	}
+
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		applyColorFillRainbow(noteData, lane, curPos);
+	}
+
+	override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
+		applyColorFillRainbow(noteData, lane, 0);
+	}
+
+	function applyColorFillRainbow(noteData:NotePositionData, lane:Int, curPos:Float):Void {
+		var a = subValues.get('alpha').value;
+		if (a <= 0 || currentValue <= 0) return;
+
+		var fillAlpha:Float = currentValue * a;
+		var col = getRainbowColor(lane, curPos);
+		noteData.hasColorFill = true;
+		noteData.colorFillR += col.red;
+		noteData.colorFillG += col.green;
+		noteData.colorFillB += col.blue;
+		noteData.colorFillAlpha = fillAlpha;
+		noteData.colorFillAlphaExplicit = true;
+	}
+}
+class ColorFillRainbow extends ColorFillRainbowModifier {}
+
 class SpiralXModifier extends Modifier {
 	override function setupSubValues() {
 		subValues.set('spacing', new ModifierSubValue(0.0));
@@ -2251,8 +2470,6 @@ class RingModifier extends Modifier {
 }
 
 class TrailModifier extends Modifier {
-	var skipCounter:Int = 0;
-
 	override function setupSubValues() {
 		subValues.set('segments', new ModifierSubValue(4.0));
 		subValues.set('spacing', new ModifierSubValue(15.0));
@@ -2262,9 +2479,6 @@ class TrailModifier extends Modifier {
 
 	override function gatherExtraNoteData(pf:Int):Array<NotePositionData> {
 		if (currentValue == baseValue || renderer == null) return null;
-
-		skipCounter++;
-		if (skipCounter % 3 != 0) return null;
 
 		var extra:Array<NotePositionData> = [];
 		var segCount = Std.int(Math.max(subValues.get('segments').value, 1));
@@ -2299,7 +2513,7 @@ class TrailModifier extends Modifier {
 				var trailCurPos = curPos - spacing * (s + 1) * currentValue;
 				NoteMovement.setNotePath(daNote, lane, daNote.speed, trailCurPos, noteDist, incomingAngle[0], incomingAngle[1]);
 
-				var trailData = renderer.createDataFromNote(i, pf, trailCurPos, noteDist, incomingAngle);
+				var trailData = renderer.createDataFromNote(i, pf, trailCurPos, noteDist, incomingAngle, daNote);
 				renderer.modifierTable.applyNoteMods(trailData, lane, trailCurPos, pf);
 				trailData.alpha *= alphaStart * (1 - (s / segCount));
 				extra.push(trailData);
@@ -2405,17 +2619,17 @@ class WormModifier extends Modifier {
 			if (noteDist < 0) incomingAngle[0] += 180;
 
 			for (row in 0...layout.fullRows) {
-				extra.push(makeRowNote(i, pf, curPos, noteDist, incomingAngle, layout.rowWidth * (row + 1) + scroll));
+				extra.push(makeRowNote(i, pf, curPos, noteDist, incomingAngle, layout.rowWidth * (row + 1) + scroll, daNote));
 			}
 			if (layout.remaining > 0 && lane < layout.remaining) {
-				extra.push(makeRowNote(i, pf, curPos, noteDist, incomingAngle, layout.rowWidth * (layout.fullRows + 1) + scroll));
+				extra.push(makeRowNote(i, pf, curPos, noteDist, incomingAngle, layout.rowWidth * (layout.fullRows + 1) + scroll, daNote));
 			}
 		}
 		return extra;
 	}
 
-	function makeRowNote(noteIndex:Int, pf:Int, curPos:Float, noteDist:Float, incomingAngle:Array<Float>, offset:Float):NotePositionData {
-		var noteData = renderer.createDataFromNote(noteIndex, pf, curPos, noteDist, incomingAngle);
+	function makeRowNote(noteIndex:Int, pf:Int, curPos:Float, noteDist:Float, incomingAngle:Array<Float>, offset:Float, ?daNote:Note = null):NotePositionData {
+		var noteData = renderer.createDataFromNote(noteIndex, pf, curPos, noteDist, incomingAngle, daNote);
 		renderer.modifierTable.applyNoteMods(noteData, renderer.getLane(noteIndex), curPos, pf);
 		noteData.x += offset;
 		return noteData;
@@ -2428,33 +2642,264 @@ class CameraModifier extends Modifier {
         subValues.set('scrollX', new ModifierSubValue(0.0));
         subValues.set('scrollY', new ModifierSubValue(0.0));
         subValues.set('zoom', new ModifierSubValue(0.0));
+        subValues.set('layer', new ModifierSubValue(0.0));
+    }
+
+    // If set to any non-empty id (name, .id or curCharacter), the renderer is
+    // placed behind THAT object wherever it lives (stage bg, characters,
+    // camGame or camHUD stuff, nested groups, lua sprites...). Wins over the
+    // numeric `layer` subvalue below.
+    public var layerId:String = null;
+
+    var lastAppliedLayer:Int = 0;
+
+    override public function getNotePath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+        var camVal = subValues.get('camera') != null ? subValues.get('camera').value : 0.0;
+        var layVal = subValues.get('layer') != null ? subValues.get('layer').value : 0.0;
+        var layName = subValues.get('layer') != null ? subValues.get('layer').name : '';
+        var zVal = subValues.get('zoom') != null ? subValues.get('zoom').value : 0.0;
+        var sxVal = subValues.get('scrollX') != null ? subValues.get('scrollX').value : 0.0;
+        var syVal = subValues.get('scrollY') != null ? subValues.get('scrollY').value : 0.0;
+        if (currentValue != baseValue || camVal != 0 || layVal != 0 || (layName != null && layName != '') || zVal != 0 || sxVal != 0 || syVal != 0) {
+            noteMath(noteData, lane, curPos, pf);
+        }
+    }
+
+    override public function getStrumPath(noteData:NotePositionData, lane:Int, pf:Int) {
+        var camVal = subValues.get('camera') != null ? subValues.get('camera').value : 0.0;
+        var layVal = subValues.get('layer') != null ? subValues.get('layer').value : 0.0;
+        var layName = subValues.get('layer') != null ? subValues.get('layer').name : '';
+        var zVal = subValues.get('zoom') != null ? subValues.get('zoom').value : 0.0;
+        var sxVal = subValues.get('scrollX') != null ? subValues.get('scrollX').value : 0.0;
+        var syVal = subValues.get('scrollY') != null ? subValues.get('scrollY').value : 0.0;
+        if (currentValue != baseValue || camVal != 0 || layVal != 0 || (layName != null && layName != '') || zVal != 0 || sxVal != 0 || syVal != 0) {
+            strumMath(noteData, lane, pf);
+        }
     }
 
     override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
-        if (currentValue >= 0.5) {
-            if (renderer != null && renderer.inEditor) {
-                var editor:Dynamic = renderer.instance;
-                noteData.camera = editor.camGamePreview;
-            } else if (PlayState.instance != null) {
-                var camValue = subValues.get('camera').value;
-                
-                if (camValue == 1) {
-                    noteData.camera = PlayState.instance.camGame;
-                } else if (camValue == 2) {
-                    noteData.camera = PlayState.instance.camOther;
-                } else {
-                    noteData.camera = PlayState.instance.camHUD;
-                }
-            }
-            noteData.cameraScrollX = subValues.get('scrollX').value;
-            noteData.cameraScrollY = subValues.get('scrollY').value;
-            noteData.cameraZoom = subValues.get('zoom').value;
+        var camValue = subValues.get('camera').value;
+        var lay:Int = Std.int(subValues.get('layer').value);
+        var layName:String = subValues.get('layer').name;
+        var layWants:Bool = lay > 0 || (layName != null && layName != '');
+        var zVal = subValues.get('zoom').value;
+        var sxVal = subValues.get('scrollX').value;
+        var syVal = subValues.get('scrollY').value;
+
+        // forced-active: many charts only tween/set subvalues (e.g. camera:camera,
+        // camera:layer) without ever turning the modifier itself on, so any active
+        // subvalue enables it just the same as currentValue >= 0.5.
+        var active:Bool = currentValue >= 0.5 || camValue != 0 || layWants || zVal != 0 || sxVal != 0 || syVal != 0;
+        if (!active) {
+            if (lastAppliedLayer != 0)
+                restoreRenderer();
+            return;
         }
+
+        var useId:Bool = (layerId != null && layerId != '') || (layName != null && layName != '');
+        var wantsLayer:Bool = layWants || useId;
+
+        var targetCamName:String = "camGame";
+        var roundedCam:Int = Math.round(camValue);
+        if (roundedCam == 2) {
+            targetCamName = "camOther";
+        } else if (roundedCam == 0 && !wantsLayer && currentValue < 0.5) {
+            targetCamName = "camHUD";
+        } else {
+            targetCamName = "camGame";
+        }
+
+        if (renderer != null && renderer.inEditor) {
+            var editor:Dynamic = renderer.instance;
+            if (targetCamName == "camHUD")
+                noteData.camera = editor.camGame;
+            else if (targetCamName == "camOther")
+                noteData.camera = editor.camHUD;
+            else
+                noteData.camera = editor.camGamePreview;
+        } else if (PlayState.instance != null) {
+            if (targetCamName == "camGame") {
+                noteData.camera = PlayState.instance.camGame;
+            } else if (targetCamName == "camOther") {
+                noteData.camera = PlayState.instance.camOther != null ? PlayState.instance.camOther : PlayState.instance.camHUD;
+            } else {
+                noteData.camera = PlayState.instance.camHUD;
+            }
+
+            if (wantsLayer) {
+                var layoutKey = useId ? -1 : lay;
+                if (lastAppliedLayer != layoutKey)
+                    placeRendererBehind(lay, layoutKey);
+            } else if (targetCamName == "camGame") {
+                if (lastAppliedLayer != -999)
+                    placeRendererBehind(4, -999);
+            } else if (lastAppliedLayer != 0) {
+                restoreRenderer();
+            }
+        }
+        noteData.cameraScrollX = sxVal;
+        noteData.cameraScrollY = syVal;
+        noteData.cameraZoom = zVal;
     }
 
     override function strumMath(noteData:NotePositionData, lane:Int, pf:Int) {
         noteMath(noteData, lane, 0, pf);
     }
+
+    // Puts the renderer just before an arbitrary object, wherever it lives
+    // (a nested group, the stage, characters, camHUD stuff, etc).
+    // Resolution order: layerId field -> "layer" subvalue name -> numeric quick-layers:
+    // 1=gf, 2=boyfriend, 3=dad, 4=stage (behind every background),
+    // 5=foreground sprites, 6=infrontOfGF sprites.
+    function placeRendererBehind(layer:Int, layoutKey:Int) {
+        if (renderer == null || renderer.inEditor) return;
+        var state = PlayState.instance;
+        if (state == null) return;
+
+        var target:Dynamic = null;
+        #if LEATHER
+        var layName:String = subValues.get('layer').name;
+        if (layerId != null && layerId != '') {
+            target = findById(state, layerId);
+            if (target == null)
+                target = resolveLeatherId(state, layerId);
+        } else if (layName != null && layName != '') {
+            target = findById(state, layName);
+            if (target == null)
+                target = resolveLeatherId(state, layName);
+        } else switch (layer) {
+            case 1:
+                target = PlayState.gf;
+            case 2:
+                target = PlayState.boyfriend;
+            case 3:
+                target = PlayState.dad;
+            case 4:
+                target = state.stage;
+            case 5:
+                target = state.stage.foregroundSprites;
+            case 6:
+                target = state.stage.infrontOfGFSprites;
+            default:
+                target = state.stage;
+        }
+        #end
+        if (target == null) {
+            var r:FlxObject = renderer;
+            var parent = findParent(state, r);
+            if (parent != null)
+                parent.remove(r);
+            state.insert(0, r);
+            lastAppliedLayer = layoutKey;
+            return;
+        }
+
+        var actualTarget:Dynamic = target;
+        #if LEATHER
+        if (Std.isOfType(target, game.Character)) {
+            var c:game.Character = cast target;
+            if (c.otherCharacters != null && c.otherCharacters.length > 0)
+                actualTarget = c.otherCharacters[0];
+        }
+        #end
+
+        var parent = findParent(state, actualTarget);
+        if (parent == null) {
+            trace('[CameraModifier] placeRendererBehind FAILED: parent group for target not found');
+            return;
+        }
+        var targetIndex:Int = (cast parent.members:Array<Dynamic>).indexOf(actualTarget);
+        if (targetIndex < 0) {
+            trace('[CameraModifier] placeRendererBehind FAILED: targetIndex < 0');
+            return;
+        }
+
+        var r:FlxObject = renderer;
+        var rendererParent = findParent(state, r);
+        if (rendererParent == parent && (cast parent.members:Array<Dynamic>).indexOf(r) == targetIndex) {
+            lastAppliedLayer = layoutKey;
+            return;
+        }
+        if (rendererParent != null)
+            rendererParent.remove(r);
+        parent.insert(targetIndex, r);
+        lastAppliedLayer = layoutKey;
+        trace('[CameraModifier] placeRendererBehind SUCCESS: placed renderer behind targetIndex=${targetIndex} of parent');
+    }
+
+    function restoreRenderer() {
+        if (renderer == null || renderer.inEditor) return;
+        var state = PlayState.instance;
+        if (state == null) return;
+        trace('[CameraModifier] restoreRenderer called: moving renderer back to state');
+
+        var r:FlxObject = renderer;
+        var parent = findParent(state, r);
+        if (parent != null)
+            parent.remove(r);
+        state.add(r);
+        lastAppliedLayer = 0;
+    }
+
+    // Deep search: returns the group that DIRECTLY contains target.
+    function findParent(group:Dynamic, target:Dynamic):Dynamic {
+        if (group == null) return null;
+        var members:Array<Dynamic> = cast group.members;
+        if (members == null) return null;
+        if (members.indexOf(target) >= 0) return group;
+        for (m in members) {
+            if (m == null) continue;
+            if (isGroup(m)) {
+                var p = findParent(m, target);
+                if (p != null) return p;
+            }
+        }
+        return null;
+    }
+
+    // Deep search by name/id/curCharacter; returns the object itself.
+    function findById(group:Dynamic, id:String):Dynamic {
+        if (group == null) return null;
+        var members:Array<Dynamic> = cast group.members;
+        if (members == null) return null;
+        for (m in members) {
+            if (m == null) continue;
+            if (Reflect.field(m, "name") == id) return m;
+            if (Reflect.hasField(m, "curCharacter") && Std.string(Reflect.field(m, "curCharacter")) == id) return m;
+            if (Reflect.hasField(m, "id") && Std.string(Reflect.field(m, "id")) == id) return m;
+            if (isGroup(m)) {
+                var r = findById(m, id);
+                if (r != null) return r;
+            }
+        }
+        return null;
+    }
+
+    // Duck-type check: anything exposing a members Array acts as a group.
+    function isGroup(o:Dynamic):Bool {
+        return o != null && Reflect.hasField(o, "members") && Std.isOfType(Reflect.field(o, "members"), Array);
+    }
+
+    #if LEATHER
+    // Extra id lookup for things that don't carry a matching .name in the
+    // members tree: lua sprites (makeStageSprite/makeLuaSprite), PlayState
+    // instance/static fields (gf, boyfriend, dad, stage, healthBar...), and
+    // stage props. Mirrors the engine's own getActorByName().
+    function resolveLeatherId(state:PlayState, id:String):Dynamic {
+        var spr:Dynamic = LuaScript.lua_Sprites.get(id);
+        if (spr != null && (Std.isOfType(spr, FlxObject) || isGroup(spr))) return spr;
+
+        var prop:Dynamic = Reflect.getProperty(state, id);
+        if (prop == null) prop = Reflect.getProperty(PlayState, id);
+        if (prop != null && (Std.isOfType(prop, FlxObject) || isGroup(prop))) return prop;
+
+        if (state.stage != null) {
+            var stageProp:Dynamic = Reflect.getProperty(state.stage, id);
+            if (stageProp != null && (Std.isOfType(stageProp, FlxObject) || isGroup(stageProp))) return stageProp;
+        }
+        return null;
+    }
+    #end
 }
 
 

@@ -39,10 +39,38 @@ class NotePositionData implements IFlxDestroyable {
 	public var redOffset:Float;
 	public var greenOffset:Float;
 	public var blueOffset:Float;
+	public var redMultiplier:Float = 1.0;
+	public var greenMultiplier:Float = 1.0;
+	public var blueMultiplier:Float = 1.0;
+	public var colorFillR:Float = 0.0;
+	public var colorFillG:Float = 0.0;
+	public var colorFillB:Float = 0.0;
+	public var colorFillAlpha:Float = 1.0;
+	public var colorFillAlphaExplicit:Bool = false;
+	public var hasColorFill:Bool = false;
 	public var camera:flixel.FlxCamera;
 	public var cameraScrollX:Float = 0.0;
 	public var cameraScrollY:Float = 0.0;
 	public var cameraZoom:Float = 1.0;
+
+	public function finalizeColorFill():Void {
+		if (!hasColorFill || colorFillAlpha <= 0) return;
+
+		var alpha:Float = Math.min(1.0, Math.max(0.0, colorFillAlpha > 1.0 ? colorFillAlpha / 255.0 : colorFillAlpha));
+		if (alpha <= 0) return;
+
+		var maxColor:Float = Math.max(colorFillR, Math.max(colorFillG, colorFillB));
+		var t:Float = (maxColor > 0) ? (Math.min(1.0, maxColor / 255.0) * alpha) : (colorFillAlphaExplicit ? alpha : 0.0);
+		if (t <= 0) return;
+
+		redMultiplier = Math.min(redMultiplier, 1.0 - t);
+		greenMultiplier = Math.min(greenMultiplier, 1.0 - t);
+		blueMultiplier = Math.min(blueMultiplier, 1.0 - t);
+
+		redOffset += colorFillR * alpha;
+		greenOffset += colorFillG * alpha;
+		blueOffset += colorFillB * alpha;
+	}
 
 	public function new() {}
 
@@ -101,6 +129,15 @@ class NotePositionData implements IFlxDestroyable {
 		this.redOffset = 0;
 		this.greenOffset = 0;
 		this.blueOffset = 0;
+		this.redMultiplier = 1.0;
+		this.greenMultiplier = 1.0;
+		this.blueMultiplier = 1.0;
+		this.colorFillR = 0.0;
+		this.colorFillG = 0.0;
+		this.colorFillB = 0.0;
+		this.colorFillAlpha = 1.0;
+		this.colorFillAlphaExplicit = false;
+		this.hasColorFill = false;
 		this.camera = null;
 		this.cameraScrollX = 0.0;
 		this.cameraScrollY = 0.0;
@@ -157,6 +194,15 @@ class NotePositionData implements IFlxDestroyable {
 		this.redOffset = 0;
 		this.greenOffset = 0;
 		this.blueOffset = 0;
+		this.redMultiplier = 1.0;
+		this.greenMultiplier = 1.0;
+		this.blueMultiplier = 1.0;
+		this.colorFillR = 0.0;
+		this.colorFillG = 0.0;
+		this.colorFillB = 0.0;
+		this.colorFillAlpha = 1.0;
+		this.colorFillAlphaExplicit = false;
+		this.hasColorFill = false;
 		this.camera = null;
 		this.cameraScrollX = 0.0;
 		this.cameraScrollY = 0.0;

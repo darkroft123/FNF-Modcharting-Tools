@@ -10,6 +10,8 @@ import game.Conductor;
 class ModTable
 {
     public var modifiers:Map<String, Modifier> = new Map<String, Modifier>();
+    // array mirror of modifiers so the per-frame loops don't pay Map hashing
+    public var modsArray:Array<Modifier> = [];
     public var instance:ModchartMusicBeatState = null;
     public var renderer:PlayfieldRenderer = null;
 
@@ -17,6 +19,9 @@ class ModTable
     //so it should end up with a lot less loops and if checks each frame
     //index table by playfield, then lane, and then loop through each modifier
     public var table:Array<Array<Array<Modifier>>> = [];
+
+    // reusable scratch so applyIncomingAngleMods stops allocating [0,0] per call
+    var _incomingAngle:Array<Float> = [0, 0];
 
     public function new(instance:ModchartMusicBeatState, renderer:PlayfieldRenderer)
     {
@@ -26,23 +31,35 @@ class ModTable
         reconstructTable();
     }
 
+    inline function syncMods() : Void
+    {
+        modsArray.resize(0);
+        for (mod in modifiers)
+            modsArray.push(mod);
+    }
+
     public function add(mod:Modifier) : Void
     {
         mod.instance = instance;
         mod.renderer = renderer;
         remove(mod.tag); //in case you replace one???
         modifiers.set(mod.tag, mod);
+        syncMods();
     }
     public function remove(tag:String) : Void
     {
         if (modifiers.exists(tag))
+        {
             modifiers.remove(tag);
+            syncMods();
+        }
     }
     public function clear() : Void
     {
         modifiers.clear();
 
         loadDefaultModifiers();
+        syncMods();
     }
     public function resetMods() : Void
     {
@@ -65,6 +82,7 @@ class ModTable
         add(new ZModifier('z'));
         add(new ConfusionModifier('confusion'));
         add(new CameraModifier('cameramodifier'));
+        add(new CameraModifier('camera'));
     
         for (i in 0...(NoteMovement.keyCount+NoteMovement.playerKeyCount))
         {
@@ -73,17 +91,20 @@ class ModTable
             add(new ZModifier('z'+i, ModifierType.LANESPECIFIC));
             add(new ConfusionModifier('confusion'+i, ModifierType.LANESPECIFIC));
             add(new CameraModifier('cameramodifier'+i, ModifierType.LANESPECIFIC));
+            add(new CameraModifier('camera'+i, ModifierType.LANESPECIFIC));
             setModTargetLane('x'+i, i);
             setModTargetLane('y'+i, i);
             setModTargetLane('z'+i, i);
             setModTargetLane('confusion'+i, i);
             setModTargetLane('cameramodifier'+i, i);
+            setModTargetLane('camera'+i, i);
         }
     }
 
     public function reconstructTable() : Void
     {
         table = [];
+        syncMods();
 
         for (pf in 0...renderer.playfields.length)
         {
@@ -147,18 +168,19 @@ class ModTable
     }
     public function applyIncomingAngleMods(lane:Int, curPos:Float, pf:Int) : Array<Float>
     {
-        var incomingAngle:Array<Float> = [0,0];
+        _incomingAngle[0] = 0;
+        _incomingAngle[1] = 0;
         if (table[pf] != null && table[pf][lane] != null)
         {
             var modList:Array<Modifier> = table[pf][lane];
             for (mod in modList)
             {
-                var ang = mod.getIncomingAngle(lane, curPos, pf); //need to get incoming angle before
-                incomingAngle[0] += ang[0];
-                incomingAngle[1] += ang[1];
+                var ang = mod.getIncomingAngle(lane, curPos, pf);
+                _incomingAngle[0] += ang[0];
+                _incomingAngle[1] += ang[1];
             }
         }
-        return incomingAngle;
+        return _incomingAngle;
     }
 
 

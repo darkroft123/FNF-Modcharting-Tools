@@ -17,6 +17,7 @@ import flixel.graphics.FlxGraphic;
 import flixel.addons.display.FlxBackdrop;
 import flixel.tweens.FlxTween;
 import flixel.text.FlxText;
+import flixel.FlxObject;
 import openfl.geom.Rectangle;
 import openfl.display.BitmapData;
 import flixel.util.FlxColor;
@@ -51,10 +52,13 @@ import ui.FlxScrollableDropDownMenu as FlxUIDropDownMenu; // im lazy sue me
 import game.Conductor;
 import utilities.CoolUtil;
 import game.StrumNote;
+import game.Character;
+import game.StageGroup;
 import utilities.NoteVariables;
 import states.LoadingState;
 import states.MusicBeatState;
 import substates.MusicBeatSubstate;
+import shaders.ColorSwap;
 #elseif (PSYCH && PSYCHVERSION >= "0.7")
 import flixel.addons.ui.FlxUIDropDownMenu;
 import backend.Section.SwagSection;
@@ -324,6 +328,13 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		ColorTransformRed,
 		ColorTransformGreen,
 		ColorTransformBlue,
+		ColorTransformRainbow,
+		ColorFillRed,
+		ColorFillGreen,
+		ColorFillBlue,
+		ColorFillAlpha,
+		ColorFillModifier,
+		ColorFillRainbow,
 	];
 	
 	public static var easeList:Array<String> = [
@@ -447,8 +458,29 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	public var check_autoSave:FlxUICheckBox;
 	var autoSaveTimer:FlxTimer;
 
+	#if LEATHER
+	public var check_previewStage:FlxUICheckBox;
+	var camStagePreview:FlxCamera;
+	var previewStageGroup:StageGroup;
+	var previewCharP1:Character;
+	var previewCharP2:Character;
+	var previewCharGF:Character;
+	var editorBG:FlxSprite;
+	var previewSung:Map<String, Bool> = new Map(); // latch: noteData:strumTime already sang
+	var songEndedFlag:Bool = false;
+	#end
+
 	override public function new() {
 		super();
+	}
+
+	public static function clearCaches():Void {
+		#if LEATHER
+		ColorSwap.colorSwapCache.clear();
+		Note.clearFallbackCaches();
+		Note.framesCache.clear();
+		StrumNote.clearCache();
+		#end
 	}
 
 	override public function create() {
@@ -456,6 +488,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		backupGpu = ClientPrefs.data.cacheOnGPU;
 		ClientPrefs.data.cacheOnGPU = false;
 		#end
+		clearCaches();
 		#if PSYCH
 		Paths.clearStoredMemory();
 		Paths.clearUnusedMemory();
@@ -479,11 +512,30 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 		camGamePreview = new FlxCamera();
 		camGamePreview.bgColor.alpha = 0;
-		FlxG.cameras.add(camGamePreview, false);
 
 		camNotes = new FlxCamera();
 		camNotes.bgColor.alpha = 0;
 		FlxG.cameras.add(camNotes, false);
+
+		#if LEATHER
+		if (camStagePreview == null) {
+			camStagePreview = new FlxCamera();
+			camStagePreview.bgColor = 0xFF181818;
+			camStagePreview.visible = false;
+			FlxG.cameras.insert(camGamePreview, 0, false);
+			FlxG.cameras.insert(camStagePreview, 1, false);
+			FlxG.camera = camGame;
+			if (FlxG.game != null && camGamePreview.flashSprite != null && camStagePreview.flashSprite != null && camGame.flashSprite != null) {
+				var gameIdx:Int = FlxG.game.getChildIndex(camGame.flashSprite);
+				FlxG.game.addChildAt(camGamePreview.flashSprite, gameIdx > 0 ? (gameIdx - 1) : 0);
+				FlxG.game.addChildAt(camStagePreview.flashSprite, gameIdx > 0 ? gameIdx : 1);
+			}
+		} else {
+			FlxG.cameras.insert(camGamePreview, 0, false);
+		}
+		#else
+		FlxG.cameras.add(camGamePreview, false);
+		#end
 
 		persistentUpdate = true;
 		persistentDraw = true;
@@ -491,6 +543,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		var bg:FlxSprite = new FlxSprite(0, 0).makeBackground(FlxColor.WHITE);
 		bg.screenCenter();
 		add(bg);
+		#if LEATHER
+		editorBG = bg;
+		#end
 
 		#if PSYCH
 		if (PlayState.isPixelStage) // Skew Kills Pixel Notes (How are you going to stretch already pixelated bit by bit notes?)
@@ -522,10 +577,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		if (Std.string(SONG.ui_Skin) == "null")
 			SONG.ui_Skin = SONG.stage == "school" || SONG.stage == "school-mad" || SONG.stage == "evil-school" ? "pixel" : "default";
 
-		// yo poggars
-		if (SONG.ui_Skin == "default")
-			SONG.ui_Skin = Options.getData("uiSkin");
-
 		ui_settings = CoolUtil.coolTextFile(Paths.txt("ui skins/" + SONG.ui_Skin + "/config"));
 		mania_size = CoolUtil.coolTextFile(Paths.txt("ui skins/" + SONG.ui_Skin + "/maniasize"));
 		mania_offset = CoolUtil.coolTextFile(Paths.txt("ui skins/" + SONG.ui_Skin + "/maniaoffset"));
@@ -540,7 +591,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		arrow_Configs.set("default", CoolUtil.coolTextFile(Paths.txt("ui skins/" + SONG.ui_Skin + "/default")));
 		type_Configs.set("default", CoolUtil.coolTextFile(Paths.txt("arrow types/default")));
 
-		arrow_Type_Sprites.set("default", Paths.getSparrowAtlas('ui skins/' + SONG.ui_Skin + "/arrows/default", 'shared'));
+		arrow_Type_Sprites.set("default", Paths.getSparrowAtlas('ui skins/' + SONG.ui_Skin + "/arrows/default", 'shared', true));
 		#end
 
 		#if (PSYCH)
@@ -569,6 +620,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		playfieldRenderer = new PlayfieldRenderer(strumLineNotes, notes, this);
 		playfieldRenderer.cameras = [camNotes];
 		playfieldRenderer.inEditor = true;
+		playfieldRenderer.editorPaused = true;
 		
 		regenerateLanePaths();
 		add(playfieldRenderer);
@@ -680,20 +732,61 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		hideUI.y -= hideUI.height;
 		hideUI.x -= hideUI.width;
 		add(hideUI);
+
+		playfieldRenderer.editorPaused = true;
+		setPosition(0);
+		dirtyUpdateNotes = true;
+		dirtyUpdateEvents = true;
 	}
 
 	#if (PSYCH && PSYCHVERSION >= "0.7.1")
 	override public function destroy() {
 		ClientPrefs.data.cacheOnGPU = backupGpu;
 		if (autoSaveTimer != null) autoSaveTimer.cancel();
+		clearCaches();
+		#if LEATHER
+		if (camStagePreview != null) { FlxG.cameras.remove(camStagePreview); camStagePreview = null; }
+		destroyStagePreview();
+		#end
 		super.destroy();
 	}
 	#else
 	override public function destroy() {
 		if (autoSaveTimer != null) autoSaveTimer.cancel();
+		clearCaches();
+		#if LEATHER
+		if (camStagePreview != null) { FlxG.cameras.remove(camStagePreview); camStagePreview = null; }
+		destroyStagePreview();
+		#end
 		super.destroy();
 	}
 	#end
+
+	static inline final PRE_ROLL_BEATS:Float = 5;
+
+	var preRolling:Bool = false;
+	var editorPosition:Float = 0;
+
+	function setPosition(value:Float):Void {
+		editorPosition = value;
+		Conductor.songPosition = value;
+		#if LEATHER
+		previewSung.clear();
+		#end
+		var audioTime:Float = value < 0 ? 0 : value;
+		inst.time = audioTime;
+		if (vocals != null) {
+			vocals.time = audioTime;
+		}
+		#if (PSYCH && PSYCHVERSION >= "0.7.3")
+		if (opponentVocals != null) {
+			opponentVocals.time = audioTime;
+		}
+		#end
+		if (songSlider != null) {
+			songSlider.value = value;
+		}
+	}
 
 	var dirtyUpdateNotes:Bool = false;
 	var dirtyUpdateEvents:Bool = false;
@@ -701,22 +794,70 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	var totalElapsed:Float = 0;
 
 	override public function update(elapsed:Float) {
+		#if LEATHER
+		FlxG.camera = camGame;
+		#end
+		if (songEndedFlag) {
+			songEndedFlag = false;
+			// the inst channel is already torn down by flixel at this point, so
+			// pausing/seeking is a safe no-op on it; vocals may still hold a live
+			// channel and must be stopped before we rewind.
+			try { inst.pause(); } catch (_:Dynamic) {}
+			if (vocals != null) try { vocals.stop(); } catch (_:Dynamic) {}
+			#if (PSYCH && PSYCHVERSION >= "0.7.3")
+			if (opponentVocals != null) try { opponentVocals.stop(); } catch (_:Dynamic) {}
+			#end
+			playfieldRenderer.editorPaused = true;
+			try { setPosition(0); } catch (_:Dynamic) {}
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
+		}
 		totalElapsed += elapsed;
 		highlight.alpha = 0.8 + Math.sin(totalElapsed * 5) * 0.15;
 		super.update(elapsed);
-		if (inst.time < 0) {
+		var minTime:Float = -Conductor.crochet * PRE_ROLL_BEATS;
+		if (editorPosition < minTime) {
 			inst.pause();
-			inst.time = 0;
-			Conductor.songPosition = inst.time;
-
-		} else if (inst.time > inst.length) {
+			preRolling = false;
+			setPosition(minTime);
+			playfieldRenderer.editorPaused = true;
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
+		} else if (inst.length > 0 && editorPosition >= inst.length) {
 			inst.pause();
-			inst.time = 0;
-			Conductor.songPosition = inst.time;
-
+			preRolling = false;
+			playfieldRenderer.editorPaused = true;
+			if (vocals != null) {
+				vocals.pause();
+			}
+			#if (PSYCH && PSYCHVERSION >= "0.7.3")
+			if (opponentVocals != null) {
+				opponentVocals.pause();
+			}
+			#end
+			setPosition(0);
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
 		}
-		if(inst.playing){
-			Conductor.songPosition += FlxG.elapsed * 1000.0 * inst.pitch;
+		if (preRolling && editorPosition >= 0) {
+			preRolling = false;
+			playfieldRenderer.editorPaused = false;
+			setPosition(editorPosition);
+			inst.play();
+			if (vocals != null)
+				vocals.play();
+			#if (PSYCH && PSYCHVERSION >= "0.7.3")
+			if (opponentVocals != null)
+				opponentVocals.play();
+			#end
+			dirtyUpdateNotes = true;
+			dirtyUpdateEvents = true;
+		}
+		if (inst.playing || (preRolling && !playfieldRenderer.editorPaused) || (!playfieldRenderer.editorPaused && editorPosition >= 0)) {
+			editorPosition += FlxG.elapsed * 1000.0 * inst.pitch;
+			Conductor.songPosition = editorPosition;
+			if (songSlider != null)
+				songSlider.value = editorPosition;
 		}
 
 		var songPosPixelPos = (((Conductor.songPosition / Conductor.stepCrochet) % 4) * gridSize);
@@ -725,7 +866,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 		for (i in 0...beatTexts.length) {
 			beatTexts[i].x = -songPosPixelPos + (gridSize * 4 * (i + 1)) - 16;
-			beatTexts[i].text = "" + (Math.floor(Conductor.songPosition / Conductor.crochet) + i);
+			beatTexts[i].text = "" + (Std.int(Math.floor(Conductor.songPosition / Conductor.crochet)) + i);
 		}
 		var eventIsSelected:Bool = false;
 		for (i in 0...eventSprites.members.length) {
@@ -766,8 +907,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
 			#end
 			if (FlxG.keys.justPressed.SPACE) {
-				if (inst.playing) {
+				if (inst.playing || (preRolling && !playfieldRenderer.editorPaused)) {
 					inst.pause();
+					preRolling = false;
 					if (vocals != null)
 						vocals.pause();
 					#if (PSYCH && PSYCHVERSION >= "0.7.3")
@@ -775,21 +917,27 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						opponentVocals.pause();
 					#end
 					playfieldRenderer.editorPaused = true;
+				} else if (editorPosition < 0) {
+					preRolling = true;
+					playfieldRenderer.editorPaused = false;
+					dirtyUpdateNotes = true;
+					dirtyUpdateEvents = true;
 				} else {
 					if (vocals != null) {
 						vocals.play();
 						vocals.pause();
-						vocals.time = inst.time;
+						vocals.time = editorPosition;
 						vocals.play();
 					}
 					#if (PSYCH && PSYCHVERSION >= "0.7.3")
 					if (opponentVocals != null) {
 						opponentVocals.play();
 						opponentVocals.pause();
-						opponentVocals.time = inst.time;
+						opponentVocals.time = editorPosition;
 						opponentVocals.play();
 					}
 					#end
+					setPosition(editorPosition);
 					inst.play();
 					playfieldRenderer.editorPaused = false;
 					dirtyUpdateNotes = true;
@@ -807,18 +955,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				if (opponentVocals != null)
 					opponentVocals.pause();
 				#end
-				inst.time += (FlxG.mouse.wheel * Conductor.stepCrochet * 0.8 * shiftThing);
-				Conductor.songPosition = inst.time;
-				if (vocals != null) {
-					vocals.pause();
-					vocals.time = inst.time;
-				}
-				#if (PSYCH && PSYCHVERSION >= "0.7.3")
-				if (opponentVocals != null) {
-					opponentVocals.pause();
-					opponentVocals.time = inst.time;
-				}
-				#end
+				setPosition(editorPosition + (FlxG.mouse.wheel * Conductor.stepCrochet * 0.8 * shiftThing));
 				playfieldRenderer.editorPaused = true;
 				dirtyUpdateNotes = true;
 				dirtyUpdateEvents = true;
@@ -832,8 +969,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				if (opponentVocals != null)
 					opponentVocals.pause();
 				#end
-				inst.time += (Conductor.crochet * 4 * shiftThing);
-								Conductor.songPosition = inst.time;
+				playfieldRenderer.editorPaused = true;
+				setPosition(editorPosition + (Conductor.crochet * 4 * shiftThing));
 
 				dirtyUpdateNotes = true;
 				dirtyUpdateEvents = true;
@@ -846,8 +983,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				if (opponentVocals != null)
 					opponentVocals.pause();
 				#end
-				inst.time -= (Conductor.crochet * 4 * shiftThing);
-								Conductor.songPosition = inst.time;
+				playfieldRenderer.editorPaused = true;
+				setPosition(editorPosition - (Conductor.crochet * 4 * shiftThing));
 
 				dirtyUpdateNotes = true;
 				dirtyUpdateEvents = true;
@@ -893,6 +1030,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 			while (unspawnNotes.length > 0 && unspawnNotes[0].strumTime - Conductor.songPosition < time) {
 				var dunceNote:Note = unspawnNotes[0];
+				dunceNote.active = true;
+				dunceNote.visible = true;
+				dunceNote.wasGoodHit = false;
 				notes.insert(0, dunceNote);
 				#if PSYCH
 				dunceNote.spawned = true;
@@ -903,6 +1043,13 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		}
 
 		var noteKillOffset = 350 / PlayState.SONG.speed;
+
+		#if LEATHER
+		// sing pass MUST run before the kill loop below, else head notes are
+		// removed the very frame they cross their strumTime and never animate.
+		if (check_previewStage != null && check_previewStage.checked)
+			updateStagePreviewSing();
+		#end
 
 		notes.forEachAlive(function(daNote:Note) {
 			if (Conductor.songPosition >= daNote.strumTime) {
@@ -990,9 +1137,28 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 		if (dirtyUpdateNotes) {
 			clearNotesAfter(Conductor.songPosition + 2000); // so scrolling back doesnt lag shit
+			var n = notes.length - 1;
+			while (n >= 0) {
+				var daNote = notes.members[n];
+				if (daNote != null) {
+					daNote.wasGoodHit = false;
+					notes.remove(daNote, true);
+				}
+				--n;
+			}
 			unspawnNotes = loadedNotes.copy();
+			for (daNote in unspawnNotes) {
+				if (daNote != null) {
+					daNote.wasGoodHit = false;
+					daNote.active = true;
+					daNote.visible = true;
+				}
+			}
 			clearNotesBefore(Conductor.songPosition);
 			dirtyUpdateNotes = false;
+			#if LEATHER
+			previewSung.clear();
+			#end
 		}
 		if (dirtyUpdateModifiers) {
 			playfieldRenderer.modifierTable.clear();
@@ -1009,6 +1175,14 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			playfieldRenderer.update(0);
 			updateEventSprites();
 		}
+
+		#if LEATHER
+		if (check_previewStage != null && check_previewStage.checked) {
+			danceCharPreview(previewCharP1, elapsed);
+			danceCharPreview(previewCharP2, elapsed);
+			danceCharPreview(previewCharGF, elapsed);
+		}
+		#end
 
 		if (playfieldRenderer.modchart.data.playfields != playfieldCountStepper.value) {
 			playfieldRenderer.modchart.data.playfields = Std.int(playfieldCountStepper.value);
@@ -1039,6 +1213,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				#elseif (PSYCH && !(PSYCHVERSION >= "0.7"))
 				StageData.loadDirectory(PlayState.SONG);
 				#end
+				PlayState.modchartingMode = false;
+				PlayState.chartingMode = false;
 				LoadingState.loadAndSwitchState(() -> new PlayState());
 			};
 			if (hasUnsavedChanges) {
@@ -1188,6 +1364,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				// daNote.kill();
 				unspawnNotes.remove(daNote);
 				// daNote.destroy();
+			} else {
+				daNote.wasGoodHit = false;
 			}
 			--i;
 		}
@@ -1203,6 +1381,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				// daNote.kill();
 				notes.remove(daNote, true);
 				// daNote.destroy();
+			} else {
+				daNote.wasGoodHit = false;
 			}
 			--i;
 		}
@@ -1280,22 +1460,17 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		try {
 			inst.loadEmbedded(Paths.inst(PlayState.SONG.song, PlayState.SONG.specialAudioName ?? PlayState.storyDifficultyStr.toLowerCase()));
 		}
+		editorPosition = inst.time;
 		Conductor.songPosition = inst.time;
 		FlxG.sound.list.add(inst);
 
 		inst.onComplete = function() {
-			inst.pause();
-			Conductor.songPosition = 0;
-			if (vocals != null) {
-				vocals.pause();
-				vocals.time = 0;
-			}
-			#if (PSYCH && PSYCHVERSION >= "0.7.3")
-			if (opponentVocals != null) {
-				opponentVocals.pause();
-				opponentVocals.time = 0;
-			}
-			#end
+			// flixel tears the finished sound's channel down right after this
+			// callback returns (it also nulls _channel/_sound and removes it from
+			// the sound list). Calling pause()/seek on those handles from in here
+			// crashes native audio silently, so only flag it: the main update loop
+			// rewinds safely on the next frame.
+			songEndedFlag = true;
 		};
 
 		notes = new FlxTypedGroup<Note>();
@@ -1378,6 +1553,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						sustainNote.parent = swagNote;
 						#end
 						sustainNote.scrollFactor.set();
+						if (susNote == floorSus) {
+							if (sustainNote.animation.getByName("holdend") != null)
+								sustainNote.animation.play("holdend");
+						}
 						unspawnNotes.push(sustainNote);
 
 						#if PSYCH
@@ -1900,6 +2079,20 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				return "Alters the color transform of a note on the green channel (0-255)";
 			case 'ColorTransformBlue':
 				return "Alters the color transform of a note on the blue channel (0-255)";
+			case 'ColorTransformRainbow' | 'ColorTransformRainbowModifier':
+				return "Alters the note color transform with a dynamic rainbow cycle. SubMods: speed, spread.";
+			case 'ColorFillRed':
+				return "Fills the note with solid red color (silhouette effect like setActorColorTrans)";
+			case 'ColorFillGreen':
+				return "Fills the note with solid green color (silhouette effect like setActorColorTrans)";
+			case 'ColorFillBlue':
+				return "Fills the note with solid blue color (silhouette effect like setActorColorTrans)";
+			case 'ColorFillAlpha':
+				return "Controls the blend/alpha intensity of the color fill (0.0 = normal note, 1.0 = solid fill). Can be tweened smoothly.";
+			case 'ColorFillModifier' | 'ColorFill':
+				return "Fills notes with a custom solid color (subvalues: r, g, b, alpha). Silhouette effect like setActorColorTrans.";
+			case 'ColorFillRainbow' | 'ColorFillRainbowModifier':
+				return "Fills notes with a dynamic rainbow silhouette. SubMods: speed, spread, alpha.";
 			case "SpiralXModifier":
 				return "Makes notes move in a spiral (X axis).  Best combined with reverse 0.5 and flip 0.5.";
 			case "SpiralYModifier":
@@ -1953,7 +2146,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		{
 			case "ease":
 				if (newType == 'set') {
-					trace('converting ease to set');
 					var temp:Array<Dynamic> = [
 						newType,
 						[data[EVENT_DATA][EVENT_TIME], data[EVENT_DATA][EVENT_EASEDATA],],
@@ -1963,13 +2155,11 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				}
 			case "set":
 				if (newType == 'ease') {
-					trace('converting set to ease');
 					var temp:Array<Dynamic> = [
 						newType,
 						[data[EVENT_DATA][EVENT_TIME], 1, "linear", data[EVENT_DATA][EVENT_SETDATA],],
 						data[EVENT_REPEAT]
 					];
-					trace(temp);
 					data = temp.copy();
 				}
 		}
@@ -2453,18 +2643,23 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			dirtyUpdateEvents = true;
 		};
 
-		songSlider = new FlxUISlider(inst, 'time', 20, 200, 0, inst.length, 250, null, 5, FlxColor.WHITE, FlxColor.BLACK);
+		// `FlxSlider.updateValue()` hands `callback` a 0..1 *ratio*, not the value, and only writes
+		// the tracked property when `setVariable` is on. The old callback sidestepped that by ignoring
+		// its argument and re-reading `inst.time` after the slider had written it.
+		//
+		// Two things change here. The slider is bound to `editorPosition` instead of `inst.time`,
+		// because FlxSound clamps `inst.time` to `0 .. length - 1` and that is exactly what made the
+		// pre roll unreachable. Its floor is therefore `-5` beats rather than 0. And the callback
+		// re-derives the absolute time from the ratio, so it stays correct whether or not
+		// `setVariable` wrote `editorPosition` for us.
+		var minSongTime:Float = -Conductor.crochet * PRE_ROLL_BEATS;
+		songSlider = new FlxUISlider(this, 'editorPosition', 20, 200, minSongTime, inst.length, 250, null, 5, FlxColor.WHITE, FlxColor.BLACK);
 		songSlider.valueLabel.visible = false;
 		songSlider.maxLabel.visible = false;
 		songSlider.minLabel.visible = false;
 		songSlider.nameLabel.text = 'Song Time';
-		songSlider.callback = function(fuck:Float) {
-			vocals.time = inst.time;
-			#if (PSYCH && PSYCHVERSION >= "0.7.3")
-			if (opponentVocals != null)
-				opponentVocals.time = inst.time;
-			#end
-			Conductor.songPosition = inst.time;
+		songSlider.callback = function(ratio:Float) {
+			setPosition((ratio * (inst.length - minSongTime)) + minSongTime);
 			dirtyUpdateEvents = true;
 			dirtyUpdateNotes = true;
 		};
@@ -2622,6 +2817,37 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			dirtyUpdateEvents = true;
 		};
 
+		#if LEATHER
+		check_previewStage = new FlxUICheckBox(check_opponentSide.x, check_opponentSide.y + 25, null, null, "Show Bg & Characters (Preview)", 100);
+		check_previewStage.checked = false;
+		check_previewStage.callback = function() {
+			if (check_previewStage.checked) {
+				buildStagePreview();
+				if (camStagePreview != null) {
+					camStagePreview.visible = true;
+					if (FlxG.cameras.list.contains(camStagePreview)) {
+						FlxG.cameras.remove(camStagePreview, false);
+						FlxG.cameras.insert(camStagePreview, 0, false);
+					}
+					if (FlxG.game != null && camStagePreview.flashSprite != null && camGame.flashSprite != null) {
+						var gameIdx:Int = FlxG.game.getChildIndex(camGame.flashSprite);
+						FlxG.game.addChildAt(camStagePreview.flashSprite, gameIdx > 0 ? (gameIdx - 1) : 0);
+					}
+				}
+				if (editorBG != null) editorBG.visible = false;
+				camGame.bgColor = FlxColor.TRANSPARENT; // let the backmost preview camera show through
+				if (grid != null) grid.alpha = 0.6;
+			} else {
+				hideStagePreview();
+				if (camStagePreview != null) camStagePreview.visible = false;
+				if (editorBG != null) editorBG.visible = true;
+				camGame.bgColor = FlxColor.BLACK;
+				if (grid != null) grid.alpha = 1.0;
+			}
+			FlxG.camera = camGame;
+		};
+		#end
+
 		var resetSpeed:FlxButton = new FlxButton(sliderRate.x + 300, sliderRate.y, 'Reset', function() {
 			playbackSpeed = 1.0;
 		});
@@ -2654,10 +2880,270 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		tab_group.add(check_lanePaths);
 		tab_group.add(check_downscroll);
 		tab_group.add(check_opponentSide);
+		#if LEATHER tab_group.add(check_previewStage); #end
 		#if (PSYCH && PSYCHVERSION >= "0.7.3") tab_group.add(check_mute_opponent_vocals); #end
 
 		UI_box.addGroup(tab_group);
 	}
+
+	#if LEATHER
+	function updateStagePreviewSing():Void {
+		if (notes == null) return;
+		var singAnims:Array<String> = ["singLEFT", "singDOWN", "singUP", "singRIGHT"];
+		for (note in notes.members) {
+			if (note == null) continue;
+			if (note.isSustainNote) {
+				if (Conductor.songPosition >= note.strumTime) {
+					var anim:String = singAnims[note.noteData % singAnims.length];
+					var char:Character = note.mustPress ? previewCharP1 : previewCharP2;
+					if (char != null) {
+						var isSinging:Bool = char.animation.curAnim != null && char.animation.curAnim.name.startsWith(anim);
+						if (!isSinging && char.isCharacterGroup && char.otherCharacters != null) {
+							for (c in char.otherCharacters)
+								if (c != null && c.animation.curAnim != null && c.animation.curAnim.name.startsWith(anim)) isSinging = true;
+						}
+						if (isSinging) {
+							char.holdTimer = 0;
+							if (char.isCharacterGroup && char.otherCharacters != null)
+								for (c in char.otherCharacters) if (c != null) c.holdTimer = 0;
+						}
+					}
+				}
+				continue;
+			}
+			var key:String = (note.mustPress ? "p1:" : "p2:") + note.noteData + ":" + note.strumTime;
+			if (previewSung.exists(key)) continue;
+			// only latch AFTER the note actually crosses, else it'd be marked as
+			// sung the very first frame it spawns (2000ms early) and never animate.
+			if (Conductor.songPosition < note.strumTime) continue;
+			if (Conductor.songPosition - note.strumTime > 350) {
+				previewSung.set(key, true);
+				continue;
+			}
+			previewSung.set(key, true);
+			var singAnim:String = singAnims[note.noteData % singAnims.length];
+			if (note.mustPress) {
+				if (previewCharP1 != null) playAnimOnNotePreview(previewCharP1, note, singAnim);
+			} else {
+				if (previewCharP2 != null) playAnimOnNotePreview(previewCharP2, note, singAnim);
+			}
+		}
+	}
+
+	function playAnimOnNotePreview(char:Character, note:game.Note, singAnim:String):Void {
+		if (char == null) return;
+		var animToPlay:String = singAnim;
+		if (note != null) {
+			if (note.singAnimSuffix != null && note.singAnimSuffix != "" && char.hasAnim(singAnim + note.singAnimSuffix)) {
+				animToPlay = singAnim + note.singAnimSuffix;
+			}
+			if (note.singAnimPrefix != null && note.singAnimPrefix != "sing" && note.singAnimPrefix != "") {
+				var prefixAnim:String = animToPlay.replace("sing", note.singAnimPrefix);
+				if (char.hasAnim(prefixAnim)) animToPlay = prefixAnim;
+			}
+		}
+
+		char.playAnim(animToPlay, true);
+		char.holdTimer = 0;
+
+		if (char.isCharacterGroup && char.otherCharacters != null) {
+			var chars:Array<Int> = note != null ? note.characters : [];
+			var charID:Int = note != null ? note.character : char.mainCharacterID;
+			var targets:Array<Int> = (chars.length <= 1) ? [charID] : chars;
+			for (i in targets) {
+				if (i < char.otherCharacters.length) {
+					var c = char.otherCharacters[i];
+					if (c != null) {
+						char.activeCharacterID = i;
+						var cAnim:String = animToPlay;
+						if (!c.hasAnim(cAnim)) cAnim = singAnim;
+						c.playAnim(cAnim, true);
+						c.holdTimer = 0;
+					}
+				}
+			}
+		}
+	}
+
+	function danceCharPreview(char:Character, elapsed:Float):Void {
+		if (char == null) return;
+		var holdLimit:Float = (char.singDuration > 0 ? char.singDuration : 4) * (Conductor.stepCrochet * 0.001);
+		if (holdLimit < 0.2) holdLimit = 0.2;
+
+		if (char.isCharacterGroup && char.otherCharacters != null) {
+			for (c in char.otherCharacters) {
+				if (c != null) {
+					var cLimit:Float = (c.singDuration > 0 ? c.singDuration : 4) * (Conductor.stepCrochet * 0.001);
+					if (cLimit < 0.2) cLimit = 0.2;
+					if (c.animation.curAnim != null && c.animation.curAnim.name.startsWith("sing")) {
+						c.holdTimer += elapsed;
+						if (c.holdTimer >= cLimit) {
+							c.dance();
+							c.holdTimer = 0;
+						}
+					} else if (c.animation.curAnim == null || c.animation.curAnim.finished) {
+						c.dance();
+					}
+				}
+			}
+		}
+
+		if (char.animation.curAnim != null && char.animation.curAnim.name.startsWith("sing")) {
+			char.holdTimer += elapsed;
+			if (char.holdTimer >= holdLimit) {
+				char.dance();
+				char.holdTimer = 0;
+			}
+		} else if (char.animation.curAnim == null || char.animation.curAnim.finished) {
+			char.dance();
+		}
+	}
+
+	function buildStagePreview():Void {
+		var SONG = PlayState.SONG;
+
+		if (previewStageGroup == null) {
+			var stgName:String = (SONG != null && SONG.stage != null && SONG.stage != '') ? SONG.stage : 'stage';
+			previewStageGroup = new game.StageGroup();
+			previewStageGroup.stage = stgName;
+			try { previewStageGroup.updateStage(stgName); } catch (e:Dynamic) {}
+		}
+
+		if (previewCharP1 == null && previewCharP2 == null && previewCharGF == null) {
+			var p1:String = (SONG != null && SONG.player1 != null && SONG.player1 != '') ? SONG.player1 : 'bf';
+			var p2:String = (SONG != null && SONG.player2 != null && SONG.player2 != '') ? SONG.player2 : 'dad';
+			var gf:String = 'gf';
+			if (SONG != null) {
+				if (SONG.gf != null && SONG.gf != '') gf = SONG.gf;
+				else if (SONG.gfVersion != null && SONG.gfVersion != '') gf = SONG.gfVersion;
+				else if (SONG.player3 != null && SONG.player3 != '') gf = SONG.player3;
+			}
+			try {
+				previewCharGF = new game.Character(400, 130, gf, false);
+				previewCharP2 = new game.Character(100, 100, p2, false);
+				previewCharP1 = new game.Character(770, 450, p1, true);
+			} catch (e:Dynamic) {}
+		}
+
+		// re-z order every build: stage -> gf -> dad -> bf -> infrontOfGF -> foreground
+		remove(previewStageGroup);
+		if (previewStageGroup != null && previewStageGroup.foregroundSprites != null) remove(previewStageGroup.foregroundSprites);
+		if (previewStageGroup != null && previewStageGroup.infrontOfGFSprites != null) remove(previewStageGroup.infrontOfGFSprites);
+		remove(previewCharGF);
+		remove(previewCharP2);
+		remove(previewCharP1);
+
+		if (previewStageGroup != null) {
+			previewStageGroup.visible = true;
+			if (previewStageGroup.foregroundSprites != null) previewStageGroup.foregroundSprites.visible = true;
+			if (previewStageGroup.infrontOfGFSprites != null) previewStageGroup.infrontOfGFSprites.visible = true;
+		}
+
+		var insertIdx:Int = editorBG != null ? (members.indexOf(editorBG) + 1) : 0;
+		if (insertIdx < 0) insertIdx = 0;
+		insert(insertIdx, previewStageGroup);
+		var curIdx:Int = members.indexOf(previewStageGroup) + 1;
+		if (previewCharGF != null) { setCharGroupVisible(previewCharGF, true); insertCharGroup(previewCharGF, curIdx); curIdx += charGroupCount(previewCharGF); }
+		if (previewCharP2 != null) { setCharGroupVisible(previewCharP2, true); insertCharGroup(previewCharP2, curIdx); curIdx += charGroupCount(previewCharP2); }
+		if (previewCharP1 != null) { setCharGroupVisible(previewCharP1, true); insertCharGroup(previewCharP1, curIdx); curIdx += charGroupCount(previewCharP1); }
+		if (previewStageGroup != null && previewStageGroup.infrontOfGFSprites != null) insert(curIdx, previewStageGroup.infrontOfGFSprites);
+		if (previewStageGroup != null && previewStageGroup.foregroundSprites != null) insert(curIdx, previewStageGroup.foregroundSprites);
+
+		if (previewStageGroup != null && previewCharP1 != null && previewCharP2 != null && previewCharGF != null)
+			previewStageGroup.setCharOffsets(previewCharP1, previewCharGF, previewCharP2);
+
+		if (previewStageGroup != null) {
+			setCamerasRecursive(previewStageGroup, camStagePreview);
+			if (previewStageGroup.foregroundSprites != null) setCamerasRecursive(previewStageGroup.foregroundSprites, camStagePreview);
+			if (previewStageGroup.infrontOfGFSprites != null) setCamerasRecursive(previewStageGroup.infrontOfGFSprites, camStagePreview);
+		}
+		setCharGroupCamera(previewCharGF, camStagePreview);
+		setCharGroupCamera(previewCharP2, camStagePreview);
+		setCharGroupCamera(previewCharP1, camStagePreview);
+		// static center focus: midpoint between P1 & P2 + stage zoom (no follow, no cam events)
+		if (camStagePreview != null && previewCharP1 != null && previewCharP2 != null) {
+			var p1Mid:FlxPoint = previewCharP1.getMidpoint();
+			var p2Mid:FlxPoint = previewCharP2.getMidpoint();
+			var midX:Float = (p1Mid.x + p2Mid.x) / 2;
+			var midY:Float = (p1Mid.y + p2Mid.y) / 2;
+			p1Mid.put();
+			p2Mid.put();
+			camStagePreview.focusOn(new FlxPoint(midX, midY));
+			camStagePreview.zoom = (previewStageGroup != null && previewStageGroup.camZoom > 0) ? previewStageGroup.camZoom : 1.0;
+		}
+	}
+
+	function hideStagePreview():Void {
+		previewSung.clear();
+		if (previewStageGroup != null) previewStageGroup.visible = false;
+		setCharGroupVisible(previewCharGF, false);
+		setCharGroupVisible(previewCharP2, false);
+		setCharGroupVisible(previewCharP1, false);
+	}
+
+	function insertCharGroup(char:Character, index:Int):Void {
+		if (char == null) return;
+		insert(index, char);
+		if (char.isCharacterGroup && char.otherCharacters != null) {
+			var i:Int = index + 1;
+			for (c in char.otherCharacters) {
+				if (c != null) { insert(i, c); i++; }
+			}
+		}
+	}
+
+	function charGroupCount(char:Character):Int {
+		if (char == null) return 0;
+		var n:Int = 1;
+		if (char.isCharacterGroup && char.otherCharacters != null) n += char.otherCharacters.length;
+		return n;
+	}
+
+	function setCharGroupVisible(char:Character, vis:Bool):Void {
+		if (char == null) return;
+		char.visible = vis;
+		if (char.isCharacterGroup && char.otherCharacters != null) {
+			for (c in char.otherCharacters) if (c != null) c.visible = vis;
+		}
+	}
+
+	function setCharGroupCamera(char:Character, cam:FlxCamera):Void {
+		if (char == null) return;
+		char.cameras = [cam];
+		if (char.isCharacterGroup && char.otherCharacters != null) {
+			for (c in char.otherCharacters) if (c != null) c.cameras = [cam];
+		}
+	}
+
+	function setCamerasRecursive(group:Dynamic, cam:FlxCamera):Void {
+		if (group == null) return;
+		var members:Array<Dynamic> = cast group.members;
+		if (members == null) return;
+		for (m in members) {
+			if (m == null) continue;
+			if (Std.isOfType(m, FlxObject))
+				(cast m : FlxObject).cameras = [cam];
+			if (Reflect.hasField(m, 'members') && Std.isOfType(Reflect.field(m, 'members'), Array))
+				setCamerasRecursive(m, cam);
+		}
+	}
+
+	function destroyStagePreview():Void {
+		if (previewStageGroup != null) { remove(previewStageGroup); previewStageGroup.destroy(); previewStageGroup = null; }
+		if (previewCharGF != null) { destroyPreviewChar(previewCharGF); previewCharGF = null; }
+		if (previewCharP2 != null) { destroyPreviewChar(previewCharP2); previewCharP2 = null; }
+		if (previewCharP1 != null) { destroyPreviewChar(previewCharP1); previewCharP1 = null; }
+	}
+
+	function destroyPreviewChar(char:Character):Void {
+		if (char == null) return;
+		remove(char);
+		if (char.isCharacterGroup && char.otherCharacters != null) {
+			for (c in char.otherCharacters) { if (c != null) { remove(c); c.destroy(); } }
+		}
+		char.destroy();
+	}
+	#end
 
 	public function addUI(tab_group:FlxUI, name:String, ui:FlxSprite, title:String = "", body:String = "", anchor:Anchor = null) {
 		tooltips.add(ui, {

@@ -28,15 +28,35 @@ class SustainStrip extends FlxStrip
 
     public var daNote:Note;
     var cachedVerts:Array<Float> = [];
+    public var loadedValidGraphic:Bool = false;
+
+    public function updateGraphic(?force:Bool = false):Void {
+        if (daNote == null) return;
+        if (!force && loadedValidGraphic && graphic != null && graphic.bitmap != null && graphic.bitmap.width > 1 && graphic.bitmap.height > 1)
+            return;
+
+        try {
+            var pixels = daNote.updateFramePixels();
+        if (pixels == null) {
+            var frame = daNote.frame;
+            if (frame != null && frame.parent != null && frame.parent.bitmap != null)
+                pixels = frame.paint();
+        }
+        if (pixels != null && pixels.width > 1 && pixels.height > 1) {
+            loadGraphic(pixels);
+            shader = daNote.shader;
+            antialiasing = daNote.antialiasing;
+            loadedValidGraphic = true;
+        }
+        } catch (e:Dynamic) {}
+    }
 
     override public function new(daNote:Note)
     {
         this.daNote = daNote;
         daNote.alpha = 1;
         super(0,0);
-        loadGraphic(daNote.updateFramePixels());
-        shader = daNote.shader;
-        antialiasing = daNote.antialiasing;
+        updateGraphic(true);
         for (uv in noteUV)
         {
             uvtData.push(uv);
@@ -56,8 +76,15 @@ class SustainStrip extends FlxStrip
         super.draw();
     }
 
+    override public function destroy():Void {
+        super.destroy();
+    }
+
     public function constructVertices(noteData:NotePositionData, thisNotePos:Vector3D, nextHalfNotePos:NotePositionData, nextNotePos:NotePositionData, flipGraphic:Bool, reverseClip:Bool)
     {
+        if (!loadedValidGraphic)
+            updateGraphic();
+
         var yOffset = -1; //fix small gaps
         if (reverseClip)
             yOffset *= -1;

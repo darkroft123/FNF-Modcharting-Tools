@@ -64,6 +64,9 @@ class ModchartFuncs
             Lua_helper.add_callback(funkin.lua, 'setModPlayfield', function(name:String, value:Int){
                 setModPlayfield(name,value);
             });
+            Lua_helper.add_callback(funkin.lua, 'setModBackLayer', function(name:String, id:String){
+                setModBackLayer(name, id);
+            });
             Lua_helper.add_callback(funkin.lua, 'addPlayfield', function(?x:Float = 0, ?y:Float = 0, ?z:Float = 0){
                 addPlayfield(x,y,z);
             });
@@ -171,6 +174,9 @@ class ModchartFuncs
         parent.set('setModPlayfield', function(name:String, value:Int){
             setModPlayfield(name,value);
         });
+        parent.set('setModBackLayer', function(name:String, id:String){
+            setModBackLayer(name, id);
+        });
         parent.set('addPlayfield', function(?x:Float = 0, ?y:Float = 0, ?z:Float = 0){
             addPlayfield(x,y,z);
         });
@@ -226,6 +232,11 @@ class ModchartFuncs
 
 		var mod = Type.resolveClass('modcharting.'+modClass);
 		if (mod == null) {mod = Type.resolveClass('modcharting.'+modClass+"Modifier");} //dont need to add "Modifier" to the end of every mod
+		if (mod == null && modClass.length > 0) {
+			var cap = modClass.charAt(0).toUpperCase() + modClass.substr(1);
+			mod = Type.resolveClass('modcharting.' + cap);
+			if (mod == null) mod = Type.resolveClass('modcharting.' + cap + "Modifier");
+		}
 
 		if (mod != null)
 		{
@@ -276,7 +287,36 @@ class ModchartFuncs
             else
                 instance.playfieldRenderer.modifiers.get(name).subValues.set(subValName,new Modifier.ModifierSubValue(value));
     }
-   public static function setModTargetLane(name:String, value:Dynamic, ?instance:ModchartMusicBeatState = null)
+   // Puts a cameramodifier's render layer behind an object by id/name
+    // (characters, stage groups, lua sprites, camGame or camHUD objects...).
+    // Uses the same slot as the "layer" subvalue (subValues.get('layer').name),
+    // so it matches what events/editor write. Pass "" to clear.
+    public static function setModBackLayer(name:String, id:String, ?instance:ModchartMusicBeatState = null)
+    {
+        if (instance == null)
+            instance = PlayState.instance;
+        if (instance.playfieldRenderer.modifiers.exists(name))
+        {
+            var mod = instance.playfieldRenderer.modifiers.get(name);
+            var camMod = Std.downcast(mod, Modifier.CameraModifier);
+            if (camMod != null)
+            {
+                if (id == '')
+                {
+                    camMod.layerId = null;
+                    if (mod.subValues.exists('layer'))
+                        mod.subValues.get('layer').name = null;
+                }
+                else
+                {
+                    camMod.layerId = id;
+                    if (mod.subValues.exists('layer'))
+                        mod.subValues.get('layer').name = id;
+                }
+            }
+        }
+    }
+    public static function setModTargetLane(name:String, value:Dynamic, ?instance:ModchartMusicBeatState = null)
         {
         if (instance == null)
             instance = PlayState.instance;
@@ -370,12 +410,14 @@ class ModchartFuncs
             for (i in 0...Math.floor(arguments.length/2))
             {
                 var name:String = Std.string(arguments[1 + (i*2)]);
-                var value:Float = Std.parseFloat(arguments[0 + (i*2)]);
-                if(Math.isNaN(value))
-                    value = 0;
+                var rawValue:String = Std.string(arguments[0 + (i*2)]);
+                var value:Float = Std.parseFloat(rawValue);
+                // alias: the engine registers the camera modifier as "cameramodifier"
+                if (name == 'camera' && !instance.playfieldRenderer.modifierTable.modifiers.exists(name))
+                    name = 'cameramodifier';
                 if (instance.playfieldRenderer.modifierTable.modifiers.exists(name))
                 {
-                    instance.playfieldRenderer.modifierTable.modifiers.get(name).currentValue = value;
+                    instance.playfieldRenderer.modifierTable.modifiers.get(name).currentValue = (Math.isNaN(value) ? 0 : value);
                 }
                 else 
                 {
@@ -384,8 +426,22 @@ class ModchartFuncs
                     {
                         var modName = subModCheck[0];
                         var subModName = subModCheck[1];
+                        if (modName == 'camera' && !instance.playfieldRenderer.modifierTable.modifiers.exists(modName))
+                            modName = 'cameramodifier';
                         if (instance.playfieldRenderer.modifierTable.modifiers.exists(modName))
-                            instance.playfieldRenderer.modifierTable.modifiers.get(modName).subValues.get(subModName).value = value;
+                        {
+                            var subVal = instance.playfieldRenderer.modifierTable.modifiers.get(modName).subValues.get(subModName);
+                            if (subVal != null)
+                            {
+                                if (Math.isNaN(value))
+                                    subVal.name = rawValue; // non-numeric: a named/id subvalue (e.g. camera layer)
+                                else
+                                {
+                                    subVal.value = value;
+                                    subVal.name = null;
+                                }
+                            }
+                        }
                     }
                 }
                     
@@ -414,7 +470,8 @@ class ModchartFuncs
             for (i in 0...Math.floor(arguments.length/2))
             {
                 var name:String = Std.string(arguments[1 + (i*2)]);
-                var value:Float = Std.parseFloat(arguments[0 + (i*2)]);
+                var rawValue:String = Std.string(arguments[0 + (i*2)]);
+                var value:Float = Std.parseFloat(rawValue);
                 if(Math.isNaN(value))
                     value = 0;
                 var subModCheck = name.split(':');
@@ -422,11 +479,26 @@ class ModchartFuncs
                 {
                     var modName = subModCheck[0];
                     var subModName = subModCheck[1];
-                    //trace(subModCheck);
+                    if (modName == 'camera' && !instance.playfieldRenderer.modifierTable.modifiers.exists(modName))
+                        modName = 'cameramodifier';
+                    var subVal:Dynamic = null;
+                    if (instance.playfieldRenderer.modifierTable.modifiers.exists(modName))
+                        subVal = instance.playfieldRenderer.modifierTable.modifiers.get(modName).subValues.get(subModName);
+                    if (subVal != null && Math.isNaN(Std.parseFloat(rawValue)))
+                    {
+                        // non-numeric: a named/id subvalue (e.g. camera:layer = "dad")
+                        subVal.name = rawValue;
+                        subVal.value = 0;
+                        continue;
+                    }
                     instance.playfieldRenderer.modifierTable.tweenModifierSubValue(modName, subModName, value, time*Conductor.crochet*0.001, ease, beat, tag);
                 }
                 else
+                {
+                    if (name == 'camera' && !instance.playfieldRenderer.modifierTable.modifiers.exists(name))
+                        name = 'cameramodifier';
                     instance.playfieldRenderer.modifierTable.tweenModifier(name, value, time*Conductor.crochet*0.001, ease, beat, tag);
+                }
                 
             }
         };

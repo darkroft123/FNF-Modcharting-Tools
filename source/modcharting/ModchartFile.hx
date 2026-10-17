@@ -77,7 +77,6 @@ class ModchartFile {
 		loadPlayfields();
 		loadModifiers();
 		loadEvents();
-		trace("hi");
 	}
 
 	public function loadFromJson(folder:String, difficulty:String):ModchartJson // load da shit
@@ -404,13 +403,27 @@ class ModchartFile {
 				var fullArgsStr:String = i[EVENT_DATA][EVENT_EASEDATA];
 				var args = fullArgsStr.trim().replace(' ', '').split(',');
 				var pairCount = Math.floor(args.length / 2);
-				var easeTime:Float = Std.parseFloat(i[EVENT_DATA][EVENT_EASETIME]);
-				if (Math.isNaN(easeTime)) easeTime = 1;
+
+				var easeTimeRaw:String = Std.string(i[EVENT_DATA][EVENT_EASETIME]);
+				var easeTimeParts = easeTimeRaw.trim().replace(' ', '').split(',');
+				var easeTimes:Array<Float> = [];
+				for (t in easeTimeParts) {
+					var parsed = Std.parseFloat(t);
+					if (!Math.isNaN(parsed)) easeTimes.push(parsed);
+				}
+				if (easeTimes.length == 0) easeTimes.push(1);
+
+				var easeRaw:String = Std.string(i[EVENT_DATA][EVENT_EASE]);
+				var eases = easeRaw.trim().replace(' ', '').split(',');
+				if (eases.length == 0) eases.push("linear");
+
 				for (p in 0...pairCount) {
 					var pairTime = times.length > p ? times[p] : times[times.length - 1];
+					var pairEaseTime = easeTimes.length > p ? easeTimes[p] : easeTimes[easeTimes.length - 1];
+					var pairEase = eases.length > p ? eases[p] : eases[eases.length - 1];
 					var pairData = args[p * 2] + "," + args[p * 2 + 1];
-					ModchartFuncs.ease(pairTime, easeTime,
-						i[EVENT_DATA][EVENT_EASE], pairData, renderer.instance);
+
+					ModchartFuncs.ease(pairTime, pairEaseTime, pairEase, pairData, renderer.instance);
 				}
 			case "set":
 				var fullArgsStr:String = i[EVENT_DATA][EVENT_SETDATA];

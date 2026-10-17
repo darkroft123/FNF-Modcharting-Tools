@@ -132,6 +132,12 @@ class ModchartUtil {
 	static var _cachedVec3D:Vector3D = new Vector3D();
 	static var _cachedPerspVec3D:Vector3D = new Vector3D();
 
+	static var _perspCacheFOV:Float = -1;
+	static var _perspCacheZNear:Float = 0;
+	static var _perspCacheZFar:Float = 0;
+	static var _perspTanHalfFOV:Float = 0;
+	static var _perspZRange:Float = 0;
+
 	/**
 		Converts a Vector3D to its in world coordinates using perspective math
 	**/
@@ -142,9 +148,17 @@ class ModchartUtil {
 
 		// TODO: maybe try using actual matrix???
 
+		if (_perspCacheFOV != FOV || _perspCacheZNear != zNear || _perspCacheZFar != zFar) {
+			_perspCacheFOV = FOV;
+			_perspCacheZNear = zNear;
+			_perspCacheZFar = zFar;
+			_perspTanHalfFOV = Math.sin(FOV * 0.5) / Math.cos(FOV * 0.5); // faster tan
+			_perspZRange = zNear - zFar;
+		}
+
 		var newz = pos.z - 1;
-		var zRange = zNear - zFar;
-		var tanHalfFOV = Math.sin(FOV * 0.5) / Math.cos(FOV * 0.5); // faster tan
+		var zRange = _perspZRange;
+		var tanHalfFOV = _perspTanHalfFOV;
 		if (pos.z > 1) // if above 1000 z basically
 			newz = 0; // should stop weird mirroring with high z values
 
@@ -201,7 +215,9 @@ class ModchartUtil {
 	}
 
 	public static function getFlxEaseByString(?ease:String = '') {
-		switch (ease.toLowerCase().trim()) {
+		if (ease == null) ease = '';
+		var cleanEase = ease.split(',')[0].toLowerCase().trim();
+		switch (cleanEase) {
 			case 'backin':
 				return FlxEase.backIn;
 			case 'backinout':
@@ -279,11 +295,15 @@ class ModchartUtil {
 	}
 
 	public static function getTimeFromBeat(beat:Float) {
-		var totalTime:Float = 0;
 		var curBpm = PlayState.SONG != null ? PlayState.SONG.bpm : Conductor.bpm;
+		if (beat < 0) {
+			return beat * (60 / curBpm) * 1000;
+		}
+
+		var totalTime:Float = 0;
 		var bpmMap = Conductor.bpmChangeMap;
 		var bpmIndex:Int = 0;
-		var maxBpm = bpmMap.length;
+		var maxBpm = bpmMap != null ? bpmMap.length : 0;
 		for (i in 0...Math.floor(beat)) {
 			while (bpmIndex < maxBpm && totalTime >= bpmMap[bpmIndex].songTime) {
 				curBpm = bpmMap[bpmIndex].bpm;

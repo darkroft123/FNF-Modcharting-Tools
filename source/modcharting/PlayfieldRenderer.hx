@@ -75,6 +75,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 	var _mirrored:Bool = false;
 
+	var _notePositions:Array<NotePositionData> = [];
 	var _vec3:Vector3D = new Vector3D();
 	var _vec3b:Vector3D = new Vector3D();
 
@@ -174,7 +175,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		strum.scale.y = strumData.scaleY;
 		strum.skew.x = strumData.skewX;
 		strum.skew.y = strumData.skewY;
-		strum.setColorTransform(1, 1, 1, strumData.alpha, strumData.redOffset, strumData.greenOffset, strumData.blueOffset);
+		strum.setColorTransform(strumData.redMultiplier, strumData.greenMultiplier, strumData.blueMultiplier, strumData.alpha, strumData.redOffset, strumData.greenOffset, strumData.blueOffset);
 	}
 
 	public function getDataForStrum(i:Int, pf:Int) {
@@ -189,6 +190,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		strumData.setupStrum(strumX, strumY, strumZ, i, strumScaleX, strumScaleY, strumSkewX, strumSkewY, pf);
 		playfields[pf].applyOffsets(strumData);
 		modifierTable.applyStrumMods(strumData, i, pf);
+		strumData.finalizeColorFill();
 		return strumData;
 	}
 
@@ -203,40 +205,43 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		daNote.scale.y = noteData.scaleY;
 		daNote.skew.x = noteData.skewX;
 		daNote.skew.y = noteData.skewY;
-		daNote.setColorTransform(1, 1, 1, noteData.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
+		daNote.setColorTransform(noteData.redMultiplier, noteData.greenMultiplier, noteData.blueMultiplier, noteData.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
 	}
 
-	public function createDataFromNote(noteIndex:Int, playfieldIndex:Int, curPos:Float, noteDist:Float, incomingAngle:Array<Float>) {
-		var noteX = notes.members[noteIndex].x;
-		var noteY = notes.members[noteIndex].y;
-		var noteZ = notes.members[noteIndex].z;
+	public function createDataFromNote(noteIndex:Int, playfieldIndex:Int, curPos:Float, noteDist:Float, incomingAngle:Array<Float>, ?daNote:Note = null) {
+		if (daNote == null)
+			daNote = notes.members[noteIndex];
+		var noteX = daNote.x;
+		var noteY = daNote.y;
+		var noteZ = daNote.z;
 		var lane = getLane(noteIndex);
 		var noteScaleX = NoteMovement.defaultScale[lane];
 		var noteScaleY = NoteMovement.defaultScale[lane];
-		var noteSkewX = notes.members[noteIndex].skew.x;
-		var noteSkewY = notes.members[noteIndex].skew.y;
+		var noteSkewX = daNote.skew.x;
+		var noteSkewY = daNote.skew.y;
 
-		var noteAlpha:Float = #if PSYCH notes.members[noteIndex].multAlpha; #else notes.members[noteIndex].isSustainNote ? 1 : 1; #end
+		var noteAlpha:Float = #if PSYCH daNote.multAlpha; #else daNote.isSustainNote ? 1 : 1; #end
 
 		var noteData:NotePositionData = NotePositionData.get();
 		noteData.setupNote(noteX, noteY, noteZ, lane, noteScaleX, noteScaleY, noteSkewX, noteSkewY, playfieldIndex, noteAlpha, curPos, noteDist,
-			incomingAngle[0], incomingAngle[1], notes.members[noteIndex].strumTime, noteIndex);
+			incomingAngle[0], incomingAngle[1], daNote.strumTime, noteIndex);
 		playfields[playfieldIndex].applyOffsets(noteData);
 		return noteData;
 	}
 
 	public function getNoteCurPos(noteIndex:Int, strumTimeOffset:Float = 0) {
-		if (notes.members[noteIndex].isSustainNote && !isDownscroll)
+		var daNote = notes.members[noteIndex];
+		if (daNote.isSustainNote && !isDownscroll)
 			strumTimeOffset += Conductor.stepCrochet; // fix upscroll lol
-		var distance = (Conductor.songPosition - notes.members[noteIndex].strumTime) + strumTimeOffset;
-		return distance * notes.members[noteIndex].speed;
+		var distance = (Conductor.songPosition - daNote.strumTime) + strumTimeOffset;
+		return distance * daNote.speed;
 	}
 
 	public inline function getLane(noteIndex:Int) {
 		return (notes.members[noteIndex].mustPress ? notes.members[noteIndex].noteData + NoteMovement.keyCount : notes.members[noteIndex].noteData);
 	}
 
-	public function getNoteDist(noteIndex:Int) {
+	public inline function getNoteDist(noteIndex:Int) {
 		var noteDist = -0.45;
 		if (isDownscroll)
 			noteDist *= -1;
@@ -244,20 +249,28 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	}
 
 	public function getNotePositions() {
-		var notePositions:Array<NotePositionData> = [];
+		_notePositions.resize(0);
+		var hasDepth:Bool = false;
 		for (pf in 0...playfields.length) {
 			for (i in 0...strumGroup.members.length) {
 				var strumData = getDataForStrum(i, pf);
-				notePositions.push(strumData);
+				if (strumData.z != 0) hasDepth = true;
+				_notePositions.push(strumData);
 			}
-			for (modName => mod in modifierTable.modifiers) {
+			for (mod in modifierTable.modsArray) {
 				if (mod.currentValue != mod.baseValue) {
 					var extra = mod.gatherExtraStrumData(pf);
-					if (extra != null) notePositions = notePositions.concat(extra);
+					if (extra != null) {
+						for (data in extra) {
+							if (data.z != 0) hasDepth = true;
+							_notePositions.push(data);
+						}
+					}
 				}
 			}
 			for (i in 0...notes.members.length) {
-				var songSpeed = notes.members[i].speed;
+				var daNote = notes.members[i];
+				var songSpeed = daNote.speed;
 
 				var lane = getLane(i);
 
@@ -267,7 +280,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				var sustainTimeThingy:Float = 0;
 
 				// just causes too many issues lol, might fix it at some point
-				/*if (notes.members[i].animation.curAnim.name.endsWith('end') && ClientPrefs.downScroll)
+				/*if (daNote.animation.curAnim.name.endsWith('end') && ClientPrefs.downScroll)
 					{
 						if (noteDist > 0)
 							sustainTimeThingy = (NoteMovement.getFakeCrochet()/4)/2; //fix stretched sustain ends (downscroll)
@@ -278,9 +291,9 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				var curPos = getNoteCurPos(i, sustainTimeThingy);
 				curPos = modifierTable.applyCurPosMods(lane, curPos, pf);
 
-				if ((notes.members[i].wasGoodHit || (notes.members[i].prevNote.wasGoodHit))
+				if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit))
 					&& curPos >= 0
-					&& notes.members[i].isSustainNote)
+					&& daNote.isSustainNote)
 					curPos = 0; // sustain clip
 
 				var incomingAngle:Array<Float> = modifierTable.applyIncomingAngleMods(lane, curPos, pf);
@@ -288,34 +301,43 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 					incomingAngle[0] += 180; // make it match for both scrolls
 
 				// get the general note path
-				NoteMovement.setNotePath(notes.members[i], lane, songSpeed, curPos, noteDist, incomingAngle[0], incomingAngle[1]);
+				NoteMovement.setNotePath(daNote, lane, songSpeed, curPos, noteDist, incomingAngle[0], incomingAngle[1]);
 
 				// save the position data
-				var noteData = createDataFromNote(i, pf, curPos, noteDist, incomingAngle);
+				var noteData = createDataFromNote(i, pf, curPos, noteDist, incomingAngle, daNote);
 
 				// add offsets to data with modifiers
 				modifierTable.applyNoteMods(noteData, lane, curPos, pf);
+				noteData.finalizeColorFill();
 
 				// add position data to list
-				notePositions.push(noteData);
+				if (noteData.z != 0) hasDepth = true;
+				_notePositions.push(noteData);
 			}
-			for (modName => mod in modifierTable.modifiers) {
+			for (mod in modifierTable.modsArray) {
 				if (mod.currentValue != mod.baseValue) {
 					var extra = mod.gatherExtraNoteData(pf);
-					if (extra != null) notePositions = notePositions.concat(extra);
+					if (extra != null) {
+						for (data in extra) {
+							if (data.z != 0) hasDepth = true;
+							_notePositions.push(data);
+						}
+					}
 				}
 			}
 		}
 		// sort by z before drawing
-		notePositions.sort(function(a, b) {
-			if (a.z < b.z)
-				return -1;
-			else if (a.z > b.z)
-				return 1;
-			else
-				return 0;
-		});
-		return notePositions;
+		if (hasDepth) {
+			_notePositions.sort(function(a, b) {
+				if (a.z < b.z)
+					return -1;
+				else if (a.z > b.z)
+					return 1;
+				else
+					return 0;
+			});
+		}
+		return _notePositions;
 	}
 
 	public function drawStrum(noteData:NotePositionData) {
@@ -391,11 +413,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		}
 		
 		if(daNote.isSustainNote){
-			if(!changeX){
-				thisNotePos.x += daNote.width;
-			}
 			if(!daNote.animation.curAnim.name.endsWith("end")){
-				noteData.scaleY *= Conductor.stepCrochet / 100 * Note.SCALE_MULT * daNote.speed;
+				noteData.scaleY *= sustainScaleMultiplier(daNote, noteData.lane);
 			}
 		}
 
@@ -426,7 +445,88 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			}
 		}
 
+		// OpenFL ignores colorTransform when a sprite has a shader, and notes carry
+		// a ColorSwap shader (their lane colors). Drop it while colorfill is active
+		// so the fill color actually shows, then restore it for the next draw.
+		var savedNoteShader = daNote.shader;
+		if (noteData.hasColorFill) daNote.shader = null;
 		daNote.draw();
+		daNote.shader = savedNoteShader;
+
+		daNote.x = oldX;
+		daNote.y = oldY;
+		daNote.scale.x = oldScaleX;
+		daNote.scale.y = oldScaleY;
+	}
+
+	inline function sustainScaleMultiplier(daNote:Note, lane:Int):Float {
+		if (daNote.inEditor)
+			return Conductor.stepCrochet / 100 * Note.SCALE_MULT * daNote.speed;
+		var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
+		var target:Float = daNote.sustainScaleY;
+		if (target <= 0)
+			return 1;
+		return target / baseScale;
+	}
+
+	function drawSustainAsSprite(noteData:NotePositionData) {
+		var daNote = notes.members[noteData.index];
+
+		var changeX:Bool = noteData.z != 0;
+		var thisNotePos:openfl.geom.Vector3D;
+		if (changeX) {
+			_vec3b.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
+				noteData.y + (daNote.height / 2), noteData.z * 0.001);
+			thisNotePos = ModchartUtil.calculatePerspective(_vec3b,
+				ModchartUtil.defaultFOV * (Math.PI / 180),
+				-(daNote.width / 2),
+				-(daNote.height / 2));
+		} else {
+			_vec3.setTo(noteData.x, noteData.y, 0);
+			thisNotePos = _vec3;
+		}
+
+		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+		var isHoldEnd = animName.endsWith("end");
+
+		if (!isHoldEnd) {
+			noteData.scaleY *= sustainScaleMultiplier(daNote, noteData.lane);
+		}
+
+		noteData.x = thisNotePos.x;
+		noteData.y = thisNotePos.y;
+		if (changeX) {
+			noteData.scaleX *= (1 / -thisNotePos.z);
+			noteData.scaleY *= (1 / -thisNotePos.z);
+		}
+		addDataToNote(noteData, daNote);
+		daNote.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
+		daNote.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
+
+		var oldX = daNote.x;
+		var oldY = daNote.y;
+		var oldScaleX = daNote.scale.x;
+		var oldScaleY = daNote.scale.y;
+
+		if (noteData.camera != null && noteData.camera.zoom != 1.0) {
+			var zoom = noteData.camera.zoom;
+			var zoomEffect = 1.0 - noteData.cameraZoom;
+			if (zoomEffect > 0) {
+				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
+				daNote.x = (daNote.x - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
+				daNote.y = (daNote.y - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
+				daNote.scale.x *= targetZoom;
+				daNote.scale.y *= targetZoom;
+			}
+		}
+
+		var tempMesh = daNote.mesh;
+		var savedNoteShader = daNote.shader;
+		daNote.mesh = null;
+		if (noteData.hasColorFill) daNote.shader = null;
+		daNote.draw();
+		daNote.shader = savedNoteShader;
+		daNote.mesh = tempMesh;
 
 		daNote.x = oldX;
 		daNote.y = oldY;
@@ -438,18 +538,41 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		if (noteData.alpha <= 0.001 || !visible || alpha <= 0.001)
 			return;
 		if(utilities.Options.getData("optimizedModcharts")){
-			drawNote(noteData);
+			drawSustainAsSprite(noteData);
 			return;
 		}
 		var daNote = notes.members[noteData.index];
-		if (daNote.mesh == null)
-			daNote.mesh = new SustainStrip(daNote);
+		if (daNote == null) return;
+
+		var sustainAnim:String = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+		if (sustainAnim.endsWith("end")) {
+			drawSustainAsSprite(noteData);
+			return;
+		}
+
+		var meshValid:Bool = true;
+		try {
+			if (daNote.mesh == null)
+				daNote.mesh = new SustainStrip(daNote);
+			else
+				daNote.mesh.updateGraphic();
+
+			if (daNote.mesh.graphic == null || daNote.mesh.graphic.bitmap == null)
+				meshValid = false;
+		} catch (e:Dynamic) {
+			meshValid = false;
+		}
+
+		if (!meshValid) {
+			drawSustainAsSprite(noteData);
+			return;
+		}
 
 		daNote.scrollFactor.set(0, 0);
 		daNote.mesh.scrollFactor.x = daNote.scrollFactor.x;
 		daNote.mesh.scrollFactor.y = daNote.scrollFactor.y;
 		daNote.alpha = noteData.alpha;
-		daNote.mesh.setColorTransform(1, 1, 1, daNote.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
+		daNote.mesh.setColorTransform(noteData.redMultiplier, noteData.greenMultiplier, noteData.blueMultiplier, daNote.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
 
 		var songSpeed = daNote.speed;
 		var lane = noteData.lane;
@@ -498,6 +621,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		}
 		// render that shit
 		try {
+			var savedMeshShader = daNote.mesh.shader;
+			daNote.mesh.shader = noteData.hasColorFill ? null : daNote.shader; // colorfill can't show through a shader
 			daNote.mesh.constructVertices(noteData, thisNotePos, nextHalfNotePos, nextNotePos, flipGraphic, reverseClip);
 			daNote.mesh.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
 			daNote.mesh.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
@@ -518,8 +643,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			}
 
 			daNote.mesh.draw();
-		} catch (e) {
-			trace(e);
+		} catch (e:Dynamic) {
+			drawSustainAsSprite(noteData);
 		}
 
 		NotePositionData.recycle(nextHalfNotePos);
@@ -553,7 +678,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		curPos = modifierTable.applyCurPosMods(lane, curPos, pf);
 
-		if ((daNote.wasGoodHit || (daNote.prevNote.wasGoodHit)) && curPos >= 0)
+		if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && curPos >= 0)
 			curPos = 0;
 		noteDist = modifierTable.applyNoteDistMods(noteDist, lane, pf);
 		var incomingAngle:Array<Float> = modifierTable.applyIncomingAngleMods(lane, curPos, pf);
@@ -562,9 +687,10 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		// get the general note path for the next note
 		NoteMovement.setNotePath(daNote, lane, songSpeed, curPos, noteDist, incomingAngle[0], incomingAngle[1]);
 		// save the position data
-		var noteData = createDataFromNote(noteData.index, pf, curPos, noteDist, incomingAngle);
+		var noteData = createDataFromNote(noteData.index, pf, curPos, noteDist, incomingAngle, daNote);
 		// add offsets to data with modifiers
 		modifierTable.applyNoteMods(noteData, lane, curPos, pf);
+		noteData.finalizeColorFill();
 		var yOffsetThingy = (NoteMovement.arrowSizes[lane] / 2);
 		_vec3b.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
 			noteData.y + (NoteMovement.arrowSizes[noteData.lane] / 2), noteData.z * 0.001);
