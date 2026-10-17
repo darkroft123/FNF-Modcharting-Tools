@@ -78,7 +78,7 @@ class ModchartUtil {
 		#end
 	}
 
-	public static function getNoteOffsetX(daNote:Note, instance:ModchartMusicBeatState) {
+	public static function getNoteOffsetX(daNote:Note, instance:ModchartMusicBeatState):Float {
 		#if PSYCH
 		return daNote.offsetX;
 		#elseif LEATHER
