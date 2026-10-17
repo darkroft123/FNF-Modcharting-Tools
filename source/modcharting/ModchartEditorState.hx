@@ -596,6 +596,18 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		type_Configs.set("default", CoolUtil.coolTextFile(Paths.txt("arrow types/default")));
 
 		arrow_Type_Sprites.set("default", Paths.getSparrowAtlas('ui skins/' + SONG.ui_Skin + "/arrows/default", 'shared', true));
+
+		// Notes get their frames through Note.getFrames(), which gates the chosen
+		// skin behind PlayState.instance and its `types` list. PlayState is destroyed
+		// (instance = null) when the editor is opened from gameplay, and there is no
+		// instance when it is opened from the toolbox, so every note used to fall
+		// back to the default skin while the strums (which read SONG.ui_Skin directly)
+		// stayed correct. The engine's own ChartingState sets up an instance the same
+		// way so its notes keep the selected skin.
+		if (PlayState.instance == null) {
+			PlayState.instance = new PlayState();
+			PlayState.instance.setupUISkinConfigs(SONG.ui_Skin);
+		}
 		#end
 
 		#if (PSYCH)
