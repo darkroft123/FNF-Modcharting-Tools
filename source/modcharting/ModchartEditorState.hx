@@ -876,13 +876,16 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				songSlider.value = editorPosition;
 		}
 
-		var songPosPixelPos = (((Conductor.songPosition / Conductor.stepCrochet) % 4) * gridSize);
+		// curDecStep walks the BPM change map so it stays monotonic across
+		// tempo changes; songPosition / stepCrochet would jump backwards when
+		// the live stepCrochet grows at a slower section.
+		var songPosPixelPos = ((curDecStep % 4) * gridSize);
 		grid.x = -curDecStep * gridSize;
 		line.x = gridSize * 4;
 
 		for (i in 0...beatTexts.length) {
 			beatTexts[i].x = -songPosPixelPos + (gridSize * 4 * (i + 1)) - 16;
-			beatTexts[i].text = "" + (Std.int(Math.floor(Conductor.songPosition / Conductor.crochet)) + i);
+			beatTexts[i].text = "" + (curBeat + i);
 		}
 		var eventIsSelected:Bool = false;
 		for (i in 0...eventSprites.members.length) {
@@ -1256,6 +1259,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		debugText.text = Std.string(FlxMath.roundDecimal(Conductor.songPosition / 1000, 2))
 			+ " / "
 			+ Std.string(FlxMath.roundDecimal(inst.length / 1000, 2))
+			+ "\nBPM: "
+			+ FlxMath.roundDecimal(Conductor.bpm, 2)
 			+ "\nBeat: "
 			+ curBeat
 			+ "\nStep: "
