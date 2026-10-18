@@ -119,6 +119,41 @@ class ModchartUtil {
 				if (change.songTime <= time) bpm = change.bpm; else break;
 		return (60 / bpm) * 1000;
 	}
+
+	public static inline function applyCameraZoomToSprite(sprite:flixel.FlxSprite, camera:flixel.FlxCamera, cameraZoom:Float):Void {
+		if (camera != null && camera.zoom != 1.0) {
+			var zoom = camera.zoom;
+			var zoomEffect = 1.0 - cameraZoom;
+			if (zoomEffect > 0) {
+				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
+				sprite.x = (sprite.x - flixel.FlxG.width * 0.5) * targetZoom + flixel.FlxG.width * 0.5;
+				sprite.y = (sprite.y - flixel.FlxG.height * 0.5) * targetZoom + flixel.FlxG.height * 0.5;
+				sprite.scale.x *= targetZoom;
+				sprite.scale.y *= targetZoom;
+			}
+		}
+	}
+
+	public static inline function applyCameraZoomToMesh(mesh:flixel.FlxStrip, camera:flixel.FlxCamera, cameraZoom:Float):Void {
+		if (camera != null && camera.zoom != 1.0 && mesh != null && mesh.vertices != null) {
+			var zoom = camera.zoom;
+			var zoomEffect = 1.0 - cameraZoom;
+			if (zoomEffect > 0) {
+				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
+				var midX:Float = flixel.FlxG.width * 0.5;
+				var midY:Float = flixel.FlxG.height * 0.5;
+				var len:Int = mesh.vertices.length;
+				for (i in 0...len) {
+					if (i % 2 == 0) {
+						mesh.vertices[i] = (mesh.vertices[i] - midX) * targetZoom + midX;
+					} else {
+						mesh.vertices[i] = (mesh.vertices[i] - midY) * targetZoom + midY;
+					}
+				}
+			}
+		}
+	}
+
 	public static var zNear:Float = 0;
 	public static var zFar:Float = 100;
 	public static var defaultFOV:Float = 90;

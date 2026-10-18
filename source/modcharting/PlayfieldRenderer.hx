@@ -69,8 +69,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	var _mirrored:Bool = false;
 
 	var _notePositions:Array<NotePositionData> = [];
-	var _vec3:Vector3D = new Vector3D();
-	var _vec3b:Vector3D = new Vector3D();
 
 	private function get_modifiers():Map<String, Modifier> {
 		return modifierTable.modifiers; // back compat with lua modcharts
@@ -158,17 +156,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			NotePositionData.recycle(data);
 	}
 
-	public function addDataToStrum(strumData:NotePositionData, strum:StrumNoteType) {
-		strum.x = strumData.x;
-		strum.y = strumData.y;
-		strum.angle3D.x = strumData.angleX;
-		strum.angle3D.y = strumData.angleY;
-		strum.angle3D.z = strumData.angleZ;
-		strum.scale.x = strumData.scaleX;
-		strum.scale.y = strumData.scaleY;
-		strum.skew.x = strumData.skewX;
-		strum.skew.y = strumData.skewY;
-		strum.setColorTransform(strumData.redMultiplier, strumData.greenMultiplier, strumData.blueMultiplier, strumData.alpha, strumData.redOffset, strumData.greenOffset, strumData.blueOffset);
+	public inline function addDataToStrum(strumData:NotePositionData, strum:StrumNoteType) {
+		NoteRenderer.addDataToStrum(strumData, strum);
 	}
 
 	public function getDataForStrum(i:Int, pf:Int) {
@@ -187,18 +176,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		return strumData;
 	}
 
-	public function addDataToNote(noteData:NotePositionData, daNote:Note) {
-		daNote.x = noteData.x;
-		daNote.y = noteData.y;
-		daNote.z = noteData.z;
-		daNote.angle3D.x = noteData.angleX;
-		daNote.angle3D.y = noteData.angleY;
-		daNote.angle3D.z = noteData.angleZ;
-		daNote.scale.x = noteData.scaleX;
-		daNote.scale.y = noteData.scaleY;
-		daNote.skew.x = noteData.skewX;
-		daNote.skew.y = noteData.skewY;
-		daNote.setColorTransform(noteData.redMultiplier, noteData.greenMultiplier, noteData.blueMultiplier, noteData.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
+	public inline function addDataToNote(noteData:NotePositionData, daNote:Note) {
+		NoteRenderer.addDataToNote(noteData, daNote);
 	}
 
 	public function createDataFromNote(noteIndex:Int, playfieldIndex:Int, curPos:Float, noteDist:Float, incomingAngle:Array<Float>, ?daNote:Note = null) {
@@ -222,18 +201,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		return noteData;
 	}
 
-	inline function getNoteSustainDuration(daNote:Note):Float {
-		#if LEATHER
-		if (!Math.isNaN(daNote.sustainMs) && daNote.sustainMs > 0)
-			return daNote.sustainMs;
-		#else
-		if (Reflect.hasField(daNote, "sustainMs")) {
-			var ms:Dynamic = Reflect.field(daNote, "sustainMs");
-			if (ms != null && !Math.isNaN(ms) && ms > 0)
-				return cast ms;
-		}
-		#end
-		return Conductor.getStepDurationAt(daNote.strumTime);
+	public inline function getNoteSustainDuration(daNote:Note):Float {
+		return SustainRenderer.getNoteSustainDuration(daNote);
 	}
 
 	public function getNoteCurPos(noteIndex:Int, strumTimeOffset:Float = 0) {
@@ -337,312 +306,22 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		return _notePositions;
 	}
 
-	public function drawStrum(noteData:NotePositionData) {
-		if (noteData.alpha <= 0)
-			return;
-		var changeX:Bool = noteData.z != 0;
-		var strumNote = strumGroup.members[noteData.index];
-		var thisNotePos:Vector3D;
-		if (changeX) {
-			_vec3b.setTo(noteData.x + (strumNote.width / 2), noteData.y + (strumNote.height / 2), noteData.z * 0.001);
-			thisNotePos = ModchartUtil.calculatePerspective(_vec3b,
-				ModchartUtil.defaultFOV * (Math.PI / 180),
-				-(strumNote.width / 2),
-				-(strumNote.height / 2));
-		} else {
-			_vec3.setTo(noteData.x, noteData.y, 0);
-			thisNotePos = _vec3;
-		}
-
-		noteData.x = thisNotePos.x;
-		noteData.y = thisNotePos.y;
-		if (changeX) {
-			noteData.scaleX *= (1 / -thisNotePos.z);
-			noteData.scaleY *= (1 / -thisNotePos.z);
-		}
-
-		addDataToStrum(noteData, strumNote);
-		strumNote.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
-		strumNote.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
-
-		var oldX = strumNote.x;
-		var oldY = strumNote.y;
-		var oldScaleX = strumNote.scale.x;
-		var oldScaleY = strumNote.scale.y;
-
-		if (noteData.camera != null && noteData.camera.zoom != 1.0) {
-			var zoom = noteData.camera.zoom;
-			var zoomEffect = 1.0 - noteData.cameraZoom; // 0 = full comp, 1 = no comp
-			if (zoomEffect > 0) {
-				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
-				strumNote.x = (strumNote.x - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
-				strumNote.y = (strumNote.y - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
-				strumNote.scale.x *= targetZoom;
-				strumNote.scale.y *= targetZoom;
-			}
-		}
-
-		strumNote.draw();
-
-		strumNote.x = oldX;
-		strumNote.y = oldY;
-		strumNote.scale.x = oldScaleX;
-		strumNote.scale.y = oldScaleY;
+	public inline function drawStrum(noteData:NotePositionData) {
+		NoteRenderer.drawStrum(this, noteData);
 	}
 
-	public function drawNote(noteData:NotePositionData) {
-		if (noteData.alpha <= 0.001 || !visible || alpha <= 0.001)
-			return;
-	
-		var changeX:Bool = noteData.z != 0;
-		var daNote = notes.members[noteData.index];
-		var thisNotePos:Vector3D;
-		if (changeX) {
-			_vec3b.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
-				noteData.y + (daNote.height / 2), noteData.z * 0.001);
-			thisNotePos = ModchartUtil.calculatePerspective(_vec3b,
-				ModchartUtil.defaultFOV * (Math.PI / 180),
-				-(daNote.width / 2),
-				-(daNote.height / 2));
-		} else {
-			_vec3.setTo(noteData.x, noteData.y, 0);
-			thisNotePos = _vec3;
-		}
-		
-		if(daNote.isSustainNote){
-			if(!daNote.animation.curAnim.name.endsWith("end")){
-				noteData.scaleY *= sustainScaleMultiplier(daNote, noteData.lane);
-			}
-		}
-
-		noteData.x = thisNotePos.x;
-		noteData.y = thisNotePos.y;
-		if (changeX) {
-			noteData.scaleX *= (1 / -thisNotePos.z);
-			noteData.scaleY *= (1 / -thisNotePos.z);
-		}
-		addDataToNote(noteData, daNote);
-		daNote.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
-		daNote.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
-
-		var oldX = daNote.x;
-		var oldY = daNote.y;
-		var oldScaleX = daNote.scale.x;
-		var oldScaleY = daNote.scale.y;
-
-		if (noteData.camera != null && noteData.camera.zoom != 1.0) {
-			var zoom = noteData.camera.zoom;
-			var zoomEffect = 1.0 - noteData.cameraZoom;
-			if (zoomEffect > 0) {
-				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
-				daNote.x = (daNote.x - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
-				daNote.y = (daNote.y - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
-				daNote.scale.x *= targetZoom;
-				daNote.scale.y *= targetZoom;
-			}
-		}
-
-		// OpenFL ignores colorTransform when a sprite has a shader, and notes carry
-		// a ColorSwap shader (their lane colors). Drop it while colorfill is active
-		// so the fill color actually shows, then restore it for the next draw.
-		var savedNoteShader = daNote.shader;
-		if (noteData.hasColorFill) daNote.shader = null;
-		daNote.draw();
-		daNote.shader = savedNoteShader;
-
-		daNote.x = oldX;
-		daNote.y = oldY;
-		daNote.scale.x = oldScaleX;
-		daNote.scale.y = oldScaleY;
+	public inline function drawNote(noteData:NotePositionData) {
+		NoteRenderer.drawNote(this, noteData);
 	}
 
-	inline function sustainScaleMultiplier(daNote:Note, lane:Int):Float {
-		if (daNote.inEditor)
-			return getNoteSustainDuration(daNote) / 100 * Note.SCALE_MULT * daNote.speed;
-		var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
-		var target:Float = daNote.sustainScaleY;
-		if (target <= 0)
-			return 1;
-		return target / baseScale;
+	public inline function drawSustainNote(noteData:NotePositionData) {
+		SustainRenderer.drawSustainNote(this, noteData);
 	}
 
-	function drawSustainAsSprite(noteData:NotePositionData) {
-		var daNote = notes.members[noteData.index];
-
-		var changeX:Bool = noteData.z != 0;
-
-		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
-		var isHoldEnd = animName.endsWith("end");
-
-		var thisNotePos:openfl.geom.Vector3D;
-		if (changeX) {
-			_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
-				noteData.y + (daNote.height / 2), noteData.z * 0.001);
-			thisNotePos = ModchartUtil.calculatePerspective(_vec3,
-				ModchartUtil.defaultFOV * (Math.PI / 180),
-				-(daNote.width / 2),
-				-(daNote.height / 2));
-		} else {
-			_vec3.setTo(noteData.x + ModchartUtil.getNoteOffsetX(daNote, instance), noteData.y, 0);
-			thisNotePos = _vec3;
-		}
-
-		if (!isHoldEnd) {
-			noteData.scaleY *= sustainScaleMultiplier(daNote, noteData.lane);
-		}
-
-		noteData.x = thisNotePos.x;
-		noteData.y = thisNotePos.y;
-		if (changeX) {
-			noteData.scaleX *= (1 / -thisNotePos.z);
-			noteData.scaleY *= (1 / -thisNotePos.z);
-		}
-		addDataToNote(noteData, daNote);
-		daNote.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
-		daNote.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
-
-		var oldX = daNote.x;
-		var oldY = daNote.y;
-		var oldScaleX = daNote.scale.x;
-		var oldScaleY = daNote.scale.y;
-
-		if (noteData.camera != null && noteData.camera.zoom != 1.0) {
-			var zoom = noteData.camera.zoom;
-			var zoomEffect = 1.0 - noteData.cameraZoom;
-			if (zoomEffect > 0) {
-				var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
-				daNote.x = (daNote.x - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
-				daNote.y = (daNote.y - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
-				daNote.scale.x *= targetZoom;
-				daNote.scale.y *= targetZoom;
-			}
-		}
-
-		var tempMesh = daNote.mesh;
-		var savedNoteShader = daNote.shader;
-		var savedOffsetX = daNote.offset.x;
-		var savedOffsetY = daNote.offset.y;
-		daNote.mesh = null;
-		// The renderer drives position from noteData; the engine's note offset
-		// (centerOffsets on sustains) would otherwise shift the sprite off the
-		// note's own position.
-		daNote.offset.set(0, 0);
-		if (noteData.hasColorFill) daNote.shader = null;
-		daNote.draw();
-		daNote.shader = savedNoteShader;
-		daNote.offset.set(savedOffsetX, savedOffsetY);
-		daNote.mesh = tempMesh;
-
-		daNote.x = oldX;
-		daNote.y = oldY;
-		daNote.scale.x = oldScaleX;
-		daNote.scale.y = oldScaleY;
+	public inline function drawSustainAsSprite(noteData:NotePositionData) {
+		SustainRenderer.drawSustainAsSprite(this, noteData);
 	}
 
-	public function drawSustainNote(noteData:NotePositionData) {
-		if (noteData.alpha <= 0.001 || !visible || alpha <= 0.001)
-			return;
-		if(utilities.Options.getData("optimizedModcharts")){
-			drawSustainAsSprite(noteData);
-			return;
-		}
-		var daNote = notes.members[noteData.index];
-		if (daNote == null) return;
-
-		var meshValid:Bool = true;
-		try {
-			if (daNote.mesh == null)
-				daNote.mesh = new SustainStrip(daNote);
-			else
-				daNote.mesh.updateGraphic();
-
-			if (daNote.mesh.graphic == null || daNote.mesh.graphic.bitmap == null)
-				meshValid = false;
-		} catch (e:Dynamic) {
-			meshValid = false;
-		}
-
-		if (!meshValid) {
-			drawSustainAsSprite(noteData);
-			return;
-		}
-
-		daNote.scrollFactor.set(0, 0);
-		daNote.mesh.scrollFactor.x = daNote.scrollFactor.x;
-		daNote.mesh.scrollFactor.y = daNote.scrollFactor.y;
-		daNote.mesh.setColorTransform(noteData.redMultiplier, noteData.greenMultiplier, noteData.blueMultiplier, noteData.alpha, noteData.redOffset, noteData.greenOffset, noteData.blueOffset);
-
-		var songSpeed = daNote.speed;
-		var lane = noteData.lane;
-
-		// makes the sustain match the center of the parent note when at weird angles
-		var yOffsetThingy = (NoteMovement.arrowSizes[lane] / 2);
-
-		_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
-			noteData.y + ((NoteMovement.arrowSizes[noteData.lane] / 2)), noteData.z * 0.001);
-		var thisNotePos = ModchartUtil.calculatePerspective(_vec3,
-			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(daNote.width / 2), yOffsetThingy
-			- (NoteMovement.arrowSizes[noteData.lane] / 2));
-
-		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
-		var isHoldEnd = animName.endsWith("end");
-
-		var stepDuration = getNoteSustainDuration(daNote);
-		var timeToNextSustain = stepDuration;
-
-		if (isHoldEnd) {
-			// Holdend cap has fixed unscaled frame height and should NEVER stretch.
-			var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
-			var capHeight:Float = daNote.frameHeight * baseScale;
-			var speedFactor:Float = daNote.speed * 0.45;
-			var capDuration:Float = (speedFactor > 0.001) ? (capHeight / speedFactor) : stepDuration;
-			if (capDuration < stepDuration)
-				timeToNextSustain = capDuration;
-		}
-
-		// Trail extends backwards in song distance along the scroll path.
-		// For body pieces, add 1.5ms overlap to eliminate subpixel rasterizer gaps.
-		var timeOffsetEnd:Float = isHoldEnd ? -timeToNextSustain : -(timeToNextSustain + 1.5);
-		var nextHalfNotePos:NotePositionData = getSustainPoint(noteData, -timeToNextSustain * 0.5);
-		var nextNotePos:NotePositionData = getSustainPoint(noteData, timeOffsetEnd);
-
-		var flipGraphic = (noteData.noteDist > 0);
-
-		// mod/bound to 360, add 360 for negative angles, mod again just in case
-		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
-		var reverseClip = (fixedAngY > 90 && fixedAngY < 270);
-
-		try {
-			var savedMeshShader = daNote.mesh.shader;
-			daNote.mesh.shader = noteData.hasColorFill ? null : daNote.shader; // colorfill can't show through a shader
-			daNote.mesh.constructVertices(noteData, thisNotePos, nextHalfNotePos, nextNotePos, flipGraphic, reverseClip);
-			daNote.mesh.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
-			daNote.mesh.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
-
-			if (noteData.camera != null && noteData.camera.zoom != 1.0) {
-				var zoom = noteData.camera.zoom;
-				var zoomEffect = 1.0 - noteData.cameraZoom;
-				if (zoomEffect > 0) {
-					var targetZoom = 1.0 + ((1.0 / zoom) - 1.0) * zoomEffect;
-					for (i in 0...daNote.mesh.vertices.length) {
-						if (i % 2 == 0) {
-							daNote.mesh.vertices[i] = (daNote.mesh.vertices[i] - flixel.FlxG.width / 2) * targetZoom + flixel.FlxG.width / 2;
-						} else {
-							daNote.mesh.vertices[i] = (daNote.mesh.vertices[i] - flixel.FlxG.height / 2) * targetZoom + flixel.FlxG.height / 2;
-						}
-					}
-				}
-			}
-
-			daNote.mesh.draw();
-		} catch (e:Dynamic) {
-			drawSustainAsSprite(noteData);
-		}
-
-		NotePositionData.recycle(nextHalfNotePos);
-		NotePositionData.recycle(nextNotePos);
-	}
 
     public function drawStuff(notePositions:Array<NotePositionData>) {
         for (noteData in notePositions) {
@@ -660,37 +339,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
         }
     }
 
-	public function getSustainPoint(noteData:NotePositionData, timeOffset:Float):NotePositionData {
-		var daNote = notes.members[noteData.index];
-		var songSpeed = daNote.speed;
-		var lane = noteData.lane;
-		var pf = noteData.playfieldIndex;
-
-		var noteDist = getNoteDist(noteData.index);
-		var curPos = getNoteCurPos(noteData.index, timeOffset);
-
-		curPos = modifierTable.applyCurPosMods(lane, curPos, pf);
-		if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && curPos >= 0)
-			curPos = 0;
-		noteDist = modifierTable.applyNoteDistMods(noteDist, lane, pf);
-		var incomingAngle = modifierTable.applyIncomingAngleMods(lane, curPos, pf);
-		if (noteDist < 0) incomingAngle[0] += 180;
-
-		NoteMovement.setNotePath(daNote, lane, songSpeed, curPos, noteDist, incomingAngle[0], incomingAngle[1]);
-		var result = createDataFromNote(noteData.index, pf, curPos, noteDist, incomingAngle, daNote);
-		modifierTable.applyNoteMods(result, lane, curPos, pf);
-		result.finalizeColorFill();
-
-		var arrowSize = NoteMovement.arrowSizes[lane] / 2;
-		_vec3b.setTo(result.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
-			result.y + (NoteMovement.arrowSizes[result.lane] / 2), result.z * 0.001);
-		var finalPos = ModchartUtil.calculatePerspective(_vec3b,
-			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(daNote.width / 2), 0);
-		result.x = finalPos.x;
-		result.y = finalPos.y;
-		result.z = finalPos.z;
-		return result;
+	public inline function getSustainPoint(noteData:NotePositionData, timeOffset:Float):NotePositionData {
+		return SustainRenderer.getSustainPoint(this, noteData, timeOffset);
 	}
 
 	public function getCorrectScrollSpeed() {
