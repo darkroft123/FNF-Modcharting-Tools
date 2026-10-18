@@ -636,6 +636,29 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			drawSustainAsSprite(noteData);
 		}
 
+		#if debug
+		trace('SUSTAIN idx=${noteData.index} strumTime=${daNote.strumTime} isDown=${isDownscroll} isEnd=${animName.endsWith("end")} thisPos=(${thisNotePos.x},${thisNotePos.y})');
+		#end
+
+		// Debug hitbox: draw a rectangle around the sustain mesh
+		#if debug
+		if (daNote.mesh != null && daNote.mesh.vertices != null && daNote.mesh.vertices.length >= 12) {
+			var minX = daNote.mesh.vertices[0];
+			var maxX = daNote.mesh.vertices[0];
+			var minY = daNote.mesh.vertices[1];
+			var maxY = daNote.mesh.vertices[1];
+			for (i in 0...Std.int(daNote.mesh.vertices.length / 2)) {
+				var vx = daNote.mesh.vertices[i * 2];
+				var vy = daNote.mesh.vertices[i * 2 + 1];
+				if (vx < minX) minX = vx;
+				if (vx > maxX) maxX = vx;
+				if (vy < minY) minY = vy;
+				if (vy > maxY) maxY = vy;
+			}
+			trace('  HITBOX idx=${noteData.index} minX=${minX} maxX=${maxX} minY=${minY} maxY=${maxY} w=${maxX-minX} h=${maxY-minY}');
+		}
+		#end
+
 		NotePositionData.recycle(nextHalfNotePos);
 		NotePositionData.recycle(nextNotePos);
 	}
