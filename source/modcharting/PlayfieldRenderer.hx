@@ -299,9 +299,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 				// get the general note path
 				NoteMovement.setNotePath(daNote, lane, songSpeed, curPos, noteDist, incomingAngle[0], incomingAngle[1]);
-				if (isDownscroll && daNote.isSustainNote) {
-					daNote.y -= Note.swagWidth - daNote.frameHeight * daNote.sustainScaleY;
-				}
 
 				// save the position data
 				var noteData = createDataFromNote(i, pf, curPos, noteDist, incomingAngle, daNote);
