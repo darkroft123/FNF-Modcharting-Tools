@@ -229,10 +229,24 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		return noteData;
 	}
 
+	inline function getNoteSustainDuration(daNote:Note):Float {
+		#if LEATHER
+		if (!Math.isNaN(daNote.sustainMs) && daNote.sustainMs > 0)
+			return daNote.sustainMs;
+		#else
+		if (Reflect.hasField(daNote, "sustainMs")) {
+			var ms:Dynamic = Reflect.field(daNote, "sustainMs");
+			if (ms != null && !Math.isNaN(ms) && ms > 0)
+				return cast ms;
+		}
+		#end
+		return Conductor.getStepDurationAt(daNote.strumTime);
+	}
+
 	public function getNoteCurPos(noteIndex:Int, strumTimeOffset:Float = 0) {
 		var daNote = notes.members[noteIndex];
 		if (daNote.isSustainNote && !isDownscroll)
-			strumTimeOffset += Conductor.stepCrochet; // fix upscroll lol
+			strumTimeOffset += getNoteSustainDuration(daNote);
 		var distance = (Conductor.songPosition - daNote.strumTime) + strumTimeOffset;
 		return distance * daNote.speed;
 	}
@@ -461,7 +475,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 	inline function sustainScaleMultiplier(daNote:Note, lane:Int):Float {
 		if (daNote.inEditor)
-			return Conductor.stepCrochet / 100 * Note.SCALE_MULT * daNote.speed;
+			return getNoteSustainDuration(daNote) / 100 * Note.SCALE_MULT * daNote.speed;
 		var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
 		var target:Float = daNote.sustainScaleY;
 		if (target <= 0)
@@ -489,7 +503,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				-(daNote.width / 2),
 				-(daNote.height / 2));
 		} else {
-			_vec3.setTo(noteData.x, noteData.y, 0);
+			_vec3.setTo(noteData.x + ModchartUtil.getNoteOffsetX(daNote, instance), noteData.y, 0);
 			thisNotePos = _vec3;
 		}
 
@@ -591,10 +605,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			-(daNote.width / 2), yOffsetThingy
 			- (NoteMovement.arrowSizes[noteData.lane] / 2));
 
-		var timeToNextSustain = ModchartUtil.getFakeCrochet() / 4;
-		if (noteData.noteDist < 0)
-			timeToNextSustain *= -1; // weird shit that fixes upscroll lol
-		// timeToNextSustain = -ModchartUtil.getFakeCrochet()/4; //weird shit that fixes upscroll lol
+		var timeToNextSustain = getNoteSustainDuration(daNote);
+		if (noteData.noteDist < 0) timeToNextSustain *= -1;
 
 		var nextHalfNotePos:NotePositionData;
 		var nextNotePos:NotePositionData;
@@ -608,43 +620,16 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			timeToNextSustain + 2.2) : getSustainPoint(noteData, timeToNextSustain - 2.2);
 		#end
 
-		// The engine never stretches the hold end to a segment: only the hold
-		// pieces get their scale.y baked by `applySustainHeight`, so the end keeps
-		// the cap's own size. The strip above spans a full step, which would stretch
-		// the cap (and fake the hold's precision); shrink it to the cap's height
-		// while keeping the per-vertex perspective/3D.
-		//
-		// `applySustainHeight` sizes a hold piece so its height equals
-		// `0.45 * segMs * speed`; inverting that gives the fraction of a step the
-		// natural cap fills, which is unit-free and matches the engine.
-		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
-		if (animName.endsWith("end")) {
-			var stepLen = 0.45 * Math.abs(timeToNextSustain) * Math.abs(daNote.speed);
-			var capLen = daNote.frameHeight * noteData.scaleY;
-			if (stepLen > 0.0001 && capLen > 0.0001) {
-				var capTime = timeToNextSustain * (capLen / stepLen);
-				NotePositionData.recycle(nextHalfNotePos);
-				NotePositionData.recycle(nextNotePos);
-				nextHalfNotePos = getSustainPoint(noteData, capTime * 0.5);
-				nextNotePos = getSustainPoint(noteData, capTime);
-			}
-		}
-
-		var flipGraphic = false;
+		var flipGraphic = isDownscroll;
+		if (noteData.noteDist < 0 && isDownscroll) // mod reverse
+			flipGraphic = false;
+		else if (noteData.noteDist > 0 && !isDownscroll)
+			flipGraphic = true;
 
 		// mod/bound to 360, add 360 for negative angles, mod again just in case
 		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
-
 		var reverseClip = (fixedAngY > 90 && fixedAngY < 270);
 
-		if (noteData.noteDist > 0) // downscroll
-		{
-			if (!isDownscroll) // fix reverse
-				flipGraphic = true;
-		} else {
-			if (isDownscroll)
-				flipGraphic = true;
-		}
 		// render that shit
 		try {
 			var savedMeshShader = daNote.mesh.shader;
