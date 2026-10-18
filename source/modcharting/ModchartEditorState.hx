@@ -1648,6 +1648,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						#end
 					}
 				}
+				#end
 
 				#if PSYCH
 				if (swagNote.mustPress) {
