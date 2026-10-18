@@ -241,6 +241,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		_stepDurationCache.set(noteIndex, val);
 		return val;
 	}
+	public inline function getLane(noteIndex:Int) {
 		return (notes.members[noteIndex].mustPress ? notes.members[noteIndex].noteData + NoteMovement.keyCount : notes.members[noteIndex].noteData);
 	}
 
