@@ -70,7 +70,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 	var _notePositions:Array<NotePositionData> = [];
 	var _vec3:Vector3D = new Vector3D();
-	var _vec3b:Vector3D = new Vector3D();
+	var _stepDurationCache:Map<Int, Float> = new Map();
 
 	private function get_modifiers():Map<String, Modifier> {
 		return modifierTable.modifiers; // back compat with lua modcharts
@@ -147,6 +147,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		strumGroup.cameras = this.cameras;
 		notes.cameras = this.cameras;
+
+		_stepDurationCache = new Map();
 
 		var positions = getNotePositions();
 		try {
@@ -231,7 +233,14 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		return distance * daNote.speed;
 	}
 
-	public inline function getLane(noteIndex:Int) {
+	inline function stepDurationAt(noteIndex:Int):Float {
+		var cached = _stepDurationCache.get(noteIndex);
+		if (cached != null) return cached;
+		var daNote = notes.members[noteIndex];
+		var val = Conductor.getStepDurationAt(daNote.strumTime);
+		_stepDurationCache.set(noteIndex, val);
+		return val;
+	}
 		return (notes.members[noteIndex].mustPress ? notes.members[noteIndex].noteData + NoteMovement.keyCount : notes.members[noteIndex].noteData);
 	}
 
@@ -539,7 +548,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			ModchartUtil.defaultFOV * (Math.PI / 180),
 			-(daNote.width / 2), 0);
 
-		var timeToNextSustain = ModchartUtil.getFakeCrochetAt(daNote.strumTime) / 4;
+		var timeToNextSustain = stepDurationAt(noteData.index);
 		if (noteData.noteDist < 0) timeToNextSustain *= -1;
 
 		var nextHalfNotePos:NotePositionData;
