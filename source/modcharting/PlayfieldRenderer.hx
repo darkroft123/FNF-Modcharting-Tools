@@ -220,7 +220,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var noteSkewX = daNote.skew.x;
 		var noteSkewY = daNote.skew.y;
 
-		var noteAlpha:Float = #if PSYCH daNote.multAlpha; #else daNote.isSustainNote ? 1 : 1; #end
+		var noteAlpha:Float = #if PSYCH daNote.multAlpha #else 1.0 #end;
 
 		var noteData:NotePositionData = NotePositionData.get();
 		noteData.setupNote(noteX, noteY, noteZ, lane, noteScaleX, noteScaleY, noteSkewX, noteSkewY, playfieldIndex, noteAlpha, curPos, noteDist,
