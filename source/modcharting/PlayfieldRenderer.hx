@@ -307,7 +307,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	public function drawStrum(noteData:NotePositionData) {
 		if (noteData.alpha <= 0)
 			return;
-		var changeX:Bool = ((noteData.z > 0 || noteData.z < 0) && noteData.z != 0);
+		var changeX:Bool = noteData.z != 0;
 		var strumNote = strumGroup.members[noteData.index];
 		var thisNotePos:Vector3D;
 		if (changeX) {
@@ -361,7 +361,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		if (noteData.alpha <= 0.001 || !visible || alpha <= 0.001)
 			return;
 	
-		var changeX:Bool = ((noteData.z > 0 || noteData.z < 0) && noteData.z != 0);
+		var changeX:Bool = noteData.z != 0;
 		var daNote = notes.members[noteData.index];
 		var thisNotePos:Vector3D;
 		if (changeX) {
