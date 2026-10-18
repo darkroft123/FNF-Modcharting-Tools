@@ -1552,6 +1552,38 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				swagNote.scrollFactor.set();
 				unspawnNotes.push(swagNote);
 
+				#if LEATHER
+				var susRealEnd:Float = daStrumTime + swagNote.sustainLength;
+				var susStarts:Array<Float> = Conductor.sustainSteps(daStrumTime, swagNote.sustainLength);
+				if (susStarts.length == 0 && swagNote.sustainLength > 0) susStarts.push(daStrumTime);
+
+				for (i in 0...susStarts.length) {
+					oldNote = unspawnNotes[Std.int(unspawnNotes.length - 1)];
+
+					var susSegStart:Float = susStarts[i];
+					var susSegEnd:Float = (i < susStarts.length - 1) ? susStarts[i + 1] : Conductor.sustainPieceEnd(susSegStart, susRealEnd);
+
+					var sustainNote:Note = new Note(
+						susSegEnd,
+						daNoteData,
+						oldNote,
+						true,
+						0,
+						songNotes[4] ?? "default",
+						null,
+						[0],
+						gottaHitNote
+					);
+					sustainNote.sustainMs = susSegEnd - susSegStart;
+					sustainNote.mustPress = gottaHitNote;
+					sustainNote.scrollFactor.set();
+					if (i == susStarts.length - 1) {
+						if (sustainNote.animation.getByName("holdend") != null)
+							sustainNote.animation.play("holdend");
+					}
+					unspawnNotes.push(sustainNote);
+				}
+				#else
 				final susLength:Float = swagNote.sustainLength / Conductor.stepCrochet;
 				final floorSus:Int = Math.floor(susLength);
 

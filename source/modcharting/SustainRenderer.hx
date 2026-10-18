@@ -28,7 +28,11 @@ class SustainRenderer {
 				return cast ms;
 		}
 		#end
+		#if LEATHER
 		return Conductor.getStepDurationAt(daNote.strumTime);
+		#else
+		return ModchartUtil.getFakeCrochetAt(daNote.strumTime) / 4;
+		#end
 	}
 
 	public static inline function sustainScaleMultiplier(daNote:Note, lane:Int):Float {
