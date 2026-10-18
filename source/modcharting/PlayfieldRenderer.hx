@@ -37,13 +37,6 @@ import StrumNote;
 
 using StringTools;
 
-// a few todos im gonna leave here:
-// setup quaternions for everything else (incoming angles and the rotate mod)
-// do add and remove buttons on stacked events in editor
-// fix switching event type in editor so you can actually do set events
-// finish setting up tooltips in editor
-// start documenting more stuff idk
-
 typedef StrumNoteType = #if (PSYCH || LEATHER) StrumNote #elseif KADE StaticArrow #elseif FOREVER_LEGACY UIStaticArrow #elseif ANDROMEDA Receptor #else FlxSprite #end;
 
 class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can edit draw
@@ -582,7 +575,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
 		var reverseClip = (fixedAngY > 90 && fixedAngY < 270);
-		// render
 		try {
 			var savedMeshShader = daNote.mesh.shader;
 			daNote.mesh.shader = noteData.hasColorFill ? null : daNote.shader; // colorfill can't show through a shader
