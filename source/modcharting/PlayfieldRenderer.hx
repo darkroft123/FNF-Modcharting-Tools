@@ -37,13 +37,6 @@ import StrumNote;
 
 using StringTools;
 
-// a few todos im gonna leave here:
-// setup quaternions for everything else (incoming angles and the rotate mod)
-// do add and remove buttons on stacked events in editor
-// fix switching event type in editor so you can actually do set events
-// finish setting up tooltips in editor
-// start documenting more stuff idk
-
 typedef StrumNoteType = #if (PSYCH || LEATHER) StrumNote #elseif KADE StaticArrow #elseif FOREVER_LEGACY UIStaticArrow #elseif ANDROMEDA Receptor #else FlxSprite #end;
 
 class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can edit draw
@@ -291,18 +284,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				var noteDist = getNoteDist(i);
 				noteDist = modifierTable.applyNoteDistMods(noteDist, lane, pf);
 
-				var sustainTimeThingy:Float = 0;
-
-				// just causes too many issues lol, might fix it at some point
-				/*if (daNote.animation.curAnim.name.endsWith('end') && ClientPrefs.downScroll)
-					{
-						if (noteDist > 0)
-							sustainTimeThingy = (NoteMovement.getFakeCrochet()/4)/2; //fix stretched sustain ends (downscroll)
-						//else 
-							//sustainTimeThingy = (-NoteMovement.getFakeCrochet()/4)/songSpeed;
-				}*/
-
-				var curPos = getNoteCurPos(i, sustainTimeThingy);
+		var sustainTimeThingy:Float = 0;
+		var curPos = getNoteCurPos(i, sustainTimeThingy);
 				curPos = modifierTable.applyCurPosMods(lane, curPos, pf);
 
 				if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit))
@@ -357,7 +340,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	public function drawStrum(noteData:NotePositionData) {
 		if (noteData.alpha <= 0)
 			return;
-		var changeX:Bool = ((noteData.z > 0 || noteData.z < 0) && noteData.z != 0);
+		var changeX:Bool = noteData.z != 0;
 		var strumNote = strumGroup.members[noteData.index];
 		var thisNotePos:Vector3D;
 		if (changeX) {
@@ -411,7 +394,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		if (noteData.alpha <= 0.001 || !visible || alpha <= 0.001)
 			return;
 	
-		var changeX:Bool = ((noteData.z > 0 || noteData.z < 0) && noteData.z != 0);
+		var changeX:Bool = noteData.z != 0;
 		var daNote = notes.members[noteData.index];
 		var thisNotePos:Vector3D;
 		if (changeX) {
@@ -620,17 +603,12 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			timeToNextSustain + 2.2) : getSustainPoint(noteData, timeToNextSustain - 2.2);
 		#end
 
-		var flipGraphic = isDownscroll;
-		if (noteData.noteDist < 0 && isDownscroll) // mod reverse
-			flipGraphic = false;
-		else if (noteData.noteDist > 0 && !isDownscroll)
-			flipGraphic = true;
+		var flipGraphic = (noteData.noteDist > 0) != isDownscroll;
 
 		// mod/bound to 360, add 360 for negative angles, mod again just in case
 		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
 		var reverseClip = (fixedAngY > 90 && fixedAngY < 270);
 
-		// render that shit
 		try {
 			var savedMeshShader = daNote.mesh.shader;
 			daNote.mesh.shader = noteData.hasColorFill ? null : daNote.shader; // colorfill can't show through a shader
@@ -679,42 +657,36 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
     }
 
 	public function getSustainPoint(noteData:NotePositionData, timeOffset:Float):NotePositionData {
-		var daNote:Note = notes.members[noteData.index];
-		var songSpeed:Float = notes.members[noteData.index].speed;
-		var lane:Int = noteData.lane;
-		var pf:Int = noteData.playfieldIndex;
+		var daNote = notes.members[noteData.index];
+		var songSpeed = daNote.speed;
+		var lane = noteData.lane;
+		var pf = noteData.playfieldIndex;
 
-		var noteDist:Float = getNoteDist(noteData.index);
-		var curPos:Float = getNoteCurPos(noteData.index, timeOffset);
+		var noteDist = getNoteDist(noteData.index);
+		var curPos = getNoteCurPos(noteData.index, timeOffset);
 
 		curPos = modifierTable.applyCurPosMods(lane, curPos, pf);
-
 		if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && curPos >= 0)
 			curPos = 0;
 		noteDist = modifierTable.applyNoteDistMods(noteDist, lane, pf);
-		var incomingAngle:Array<Float> = modifierTable.applyIncomingAngleMods(lane, curPos, pf);
-		if (noteDist < 0)
-			incomingAngle[0] += 180; // make it match for both scrolls
-		// get the general note path for the next note
+		var incomingAngle = modifierTable.applyIncomingAngleMods(lane, curPos, pf);
+		if (noteDist < 0) incomingAngle[0] += 180;
+
 		NoteMovement.setNotePath(daNote, lane, songSpeed, curPos, noteDist, incomingAngle[0], incomingAngle[1]);
-		// save the position data
-		var noteData = createDataFromNote(noteData.index, pf, curPos, noteDist, incomingAngle, daNote);
-		// add offsets to data with modifiers
-		modifierTable.applyNoteMods(noteData, lane, curPos, pf);
-		noteData.finalizeColorFill();
-		var yOffsetThingy = (NoteMovement.arrowSizes[lane] / 2);
-		_vec3b.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
-			noteData.y + (NoteMovement.arrowSizes[noteData.lane] / 2), noteData.z * 0.001);
-		var finalNotePos = ModchartUtil.calculatePerspective(_vec3b,
+		var result = createDataFromNote(noteData.index, pf, curPos, noteDist, incomingAngle, daNote);
+		modifierTable.applyNoteMods(result, lane, curPos, pf);
+		result.finalizeColorFill();
+
+		var arrowSize = NoteMovement.arrowSizes[lane] / 2;
+		_vec3b.setTo(result.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
+			result.y + (NoteMovement.arrowSizes[result.lane] / 2), result.z * 0.001);
+		var finalPos = ModchartUtil.calculatePerspective(_vec3b,
 			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(daNote.width / 2), yOffsetThingy
-			- (NoteMovement.arrowSizes[noteData.lane] / 2));
-
-		noteData.x = finalNotePos.x;
-		noteData.y = finalNotePos.y;
-		noteData.z = finalNotePos.z;
-
-		return noteData;
+			-(daNote.width / 2), 0);
+		result.x = finalPos.x;
+		result.y = finalPos.y;
+		result.z = finalPos.z;
+		return result;
 	}
 
 	public function getCorrectScrollSpeed() {
