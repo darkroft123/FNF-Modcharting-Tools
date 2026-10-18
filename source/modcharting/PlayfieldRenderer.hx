@@ -241,8 +241,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		if (daNote.isSustainNote && !isDownscroll)
 			strumTimeOffset += getNoteSustainDuration(daNote);
 		if (daNote.isSustainNote && isDownscroll)
-			strumTimeOffset += getNoteSustainDuration(daNote);
-		if (daNote.isSustainNote && isDownscroll)
 			strumTimeOffset -= getNoteSustainDuration(daNote);
 		var distance = (Conductor.songPosition - daNote.strumTime) + strumTimeOffset;
 		return distance * daNote.speed;
