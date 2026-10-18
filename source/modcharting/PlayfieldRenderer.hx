@@ -296,6 +296,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			});
 		}
 		return _notePositions;
+	}
 
 	public function drawStrum(noteData:NotePositionData) {
 		if (noteData.alpha <= 0)
