@@ -2526,6 +2526,105 @@ class TrailModifier extends Modifier {
 	}
 }
 
+class CopySpriteModifier extends Modifier {
+	override function setupSubValues() {
+		subValues.set('amount', new ModifierSubValue(1.0)); // cantidad por defecto 1
+		subValues.set('offsetX', new ModifierSubValue(0.0));
+		subValues.set('offsetY', new ModifierSubValue(-50.0)); // arriba del strum por defecto
+		subValues.set('offsetZ', new ModifierSubValue(0.0));
+		subValues.set('offset', new ModifierSubValue(1.0)); // multiplicador general de offset
+		subValues.set('speed', new ModifierSubValue(1.0)); // velocidad de desplazamiento/trail
+		subValues.set('alpha', new ModifierSubValue(0.8)); // opacidad de la copia
+		subValues.set('hitWindow', new ModifierSubValue(180.0)); // proximidad al strum para activarse
+	}
+
+	override function gatherExtraNoteData(pf:Int):Array<NotePositionData> {
+		if (currentValue == baseValue || renderer == null) return null;
+
+		var extra:Array<NotePositionData> = [];
+		var amountVal:Float = 1.0;
+		if (subValues.exists('amount'))
+			amountVal = subValues.get('amount').value;
+		else if (subValues.exists('count'))
+			amountVal = subValues.get('count').value;
+		else if (subValues.exists('cantidad'))
+			amountVal = subValues.get('cantidad').value;
+
+		var copyCount = Std.int(Math.max(amountVal, 1));
+		var offX = subValues.exists('offsetX') ? subValues.get('offsetX').value : 0.0;
+		var offY = subValues.exists('offsetY') ? subValues.get('offsetY').value : -50.0;
+		var offZ = subValues.exists('offsetZ') ? subValues.get('offsetZ').value : 0.0;
+		var offsetMult = subValues.exists('offset') ? subValues.get('offset').value : 1.0;
+		var speedVal = subValues.exists('speed') ? subValues.get('speed').value : 1.0;
+		var alphaVal = subValues.exists('alpha') ? subValues.get('alpha').value : 0.8;
+		var hitWindow = subValues.exists('hitWindow') ? subValues.get('hitWindow').value : 180.0;
+
+		var baseOffsetY = offY;
+		if (isDownscroll() && offY == -50.0) {
+			baseOffsetY = 50.0;
+		}
+
+		for (i in 0...renderer.notes.members.length) {
+			var daNote = renderer.notes.members[i];
+			if (daNote == null) continue;
+			var lane = renderer.getLane(i);
+			if (!checkLane(lane) || !checkPlayField(pf)) continue;
+
+			var curPos = renderer.getNoteCurPos(i);
+			curPos = renderer.modifierTable.applyCurPosMods(lane, curPos, pf);
+
+			if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && curPos >= 0 && daNote.isSustainNote)
+				curPos = 0;
+
+			// Detectar si la nota llegó al strum, está siendo tocada o presionada
+			var isAtStrum = (Math.abs(curPos) <= hitWindow) || daNote.wasGoodHit || (curPos <= 0 && curPos >= -hitWindow * 2.5);
+			if (!isAtStrum) continue;
+
+			var noteDist = renderer.getNoteDist(i);
+			noteDist = renderer.modifierTable.applyNoteDistMods(noteDist, lane, pf);
+
+			var incomingAngle = renderer.modifierTable.applyIncomingAngleMods(lane, curPos, pf);
+			if (noteDist < 0) incomingAngle[0] += 180;
+
+			var origX = daNote.x;
+			var origY = daNote.y;
+
+			var timeFactor = (curPos <= 0 ? (-curPos / 100.0) : 0.0);
+
+			for (c in 0...copyCount) {
+				var step = (c + 1);
+				NoteMovement.setNotePath(daNote, lane, daNote.speed, curPos, noteDist, incomingAngle[0], incomingAngle[1]);
+
+				var copyData = renderer.createDataFromNote(i, pf, curPos, noteDist, incomingAngle, daNote);
+				renderer.modifierTable.applyNoteMods(copyData, lane, curPos, pf);
+
+				var totalOffX = offX * step * offsetMult;
+				var totalOffY = baseOffsetY * step * offsetMult;
+				var totalOffZ = offZ * step * offsetMult;
+
+				if (speedVal != 0) {
+					totalOffX += (offX != 0 ? (offX > 0 ? 1 : -1) : 0) * (timeFactor * speedVal * 25.0);
+					totalOffY += (baseOffsetY != 0 ? (baseOffsetY > 0 ? 1 : -1) : -1) * (timeFactor * speedVal * 25.0);
+				}
+
+				copyData.x += totalOffX * currentValue;
+				copyData.y += totalOffY * currentValue;
+				copyData.z += totalOffZ * currentValue;
+
+				var fade = (copyCount > 1) ? (1.0 - (c / copyCount) * 0.5) : 1.0;
+				copyData.alpha *= alphaVal * fade * currentValue;
+
+				copyData.finalizeColorFill();
+				extra.push(copyData);
+			}
+
+			daNote.x = origX;
+			daNote.y = origY;
+		}
+		return extra;
+	}
+}
+
 class WormModifier extends Modifier {
 	override function setupSubValues() {
 		subValues.set('spacing', new ModifierSubValue(230.0));
