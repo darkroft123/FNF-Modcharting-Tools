@@ -119,6 +119,7 @@ class ModchartUtil {
 				if (change.songTime <= time) bpm = change.bpm; else break;
 		return (60 / bpm) * 1000;
 	}
+	public static var zNear:Float = 0;
 	public static var zFar:Float = 100;
 	public static var defaultFOV:Float = 90;
 
