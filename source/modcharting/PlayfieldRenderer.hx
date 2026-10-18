@@ -625,8 +625,13 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				var capTime = timeToNextSustain * (capLen / stepLen);
 				NotePositionData.recycle(nextHalfNotePos);
 				NotePositionData.recycle(nextNotePos);
+				#if (PSYCH && !(PSYCHVERSION >= "0.7"))
 				nextHalfNotePos = getSustainPoint(noteData, capTime * 0.5);
 				nextNotePos = getSustainPoint(noteData, capTime);
+				#else
+				nextHalfNotePos = isDownscroll ? getSustainPoint(noteData, capTime * 0.458) : getSustainPoint(noteData, capTime * 0.548);
+				nextNotePos = isDownscroll ? getSustainPoint(noteData, capTime + 2.2) : getSustainPoint(noteData, capTime - 2.2);
+				#end
 			}
 		}
 
