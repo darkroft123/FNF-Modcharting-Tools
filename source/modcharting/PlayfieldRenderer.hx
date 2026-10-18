@@ -618,24 +618,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			}
 		}
 
-		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
-		if (animName.endsWith("end")) {
-			var stepLen = 0.45 * Math.abs(timeToNextSustain) * Math.abs(daNote.speed);
-			var capLen = daNote.frameHeight * noteData.scaleY;
-			if (stepLen > 0.0001 && capLen > 0.0001) {
-				var capTime = timeToNextSustain * (capLen / stepLen);
-				NotePositionData.recycle(nextHalfNotePos);
-				NotePositionData.recycle(nextNotePos);
-				#if (PSYCH && !(PSYCHVERSION >= "0.7"))
-				nextHalfNotePos = getSustainPoint(noteData, capTime * 0.5);
-				nextNotePos = getSustainPoint(noteData, capTime);
-				#else
-				nextHalfNotePos = isDownscroll ? getSustainPoint(noteData, capTime * 0.458) : getSustainPoint(noteData, capTime * 0.548);
-				nextNotePos = isDownscroll ? getSustainPoint(noteData, capTime + 2.2) : getSustainPoint(noteData, capTime - 2.2);
-				#end
-			}
-		}
-
 		var flipGraphic = (noteData.noteDist > 0) != isDownscroll;
 
 		// mod/bound to 360, add 360 for negative angles, mod again just in case
