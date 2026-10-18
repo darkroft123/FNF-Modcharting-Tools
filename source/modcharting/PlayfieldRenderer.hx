@@ -70,6 +70,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 	var _notePositions:Array<NotePositionData> = [];
 	var _vec3:Vector3D = new Vector3D();
+	var _vec3b:Vector3D = new Vector3D();
 	var _stepDurationCache:Map<Int, Float> = new Map();
 
 	private function get_modifiers():Map<String, Modifier> {
