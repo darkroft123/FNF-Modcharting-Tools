@@ -2534,6 +2534,7 @@ class CopySpriteModifier extends Modifier {
 		subValues.set('offsetZ', new ModifierSubValue(0.0));
 		subValues.set('offset', new ModifierSubValue(1.0)); // multiplicador general de offset
 		subValues.set('speed', new ModifierSubValue(1.0)); // velocidad de desplazamiento/trail
+		subValues.set('fadeSpeed', new ModifierSubValue(1.0)); // velocidad a la que se desvanece hasta destruirse
 		subValues.set('alpha', new ModifierSubValue(0.8)); // opacidad de la copia
 		subValues.set('hitWindow', new ModifierSubValue(180.0)); // proximidad al strum para activarse
 	}
@@ -2556,6 +2557,7 @@ class CopySpriteModifier extends Modifier {
 		var offZ = subValues.exists('offsetZ') ? subValues.get('offsetZ').value : 0.0;
 		var offsetMult = subValues.exists('offset') ? subValues.get('offset').value : 1.0;
 		var speedVal = subValues.exists('speed') ? subValues.get('speed').value : 1.0;
+		var fadeSpeedVal = subValues.exists('fadeSpeed') ? subValues.get('fadeSpeed').value : 1.0;
 		var alphaVal = subValues.exists('alpha') ? subValues.get('alpha').value : 0.8;
 		var hitWindow = subValues.exists('hitWindow') ? subValues.get('hitWindow').value : 180.0;
 
@@ -2611,8 +2613,14 @@ class CopySpriteModifier extends Modifier {
 				copyData.y += totalOffY * currentValue;
 				copyData.z += totalOffZ * currentValue;
 
+				var lifeFade = 1.0;
+				if (timeFactor > 0 && speedVal > 0) {
+					lifeFade = Math.max(0.0, 1.0 - (timeFactor * speedVal * fadeSpeedVal * 0.35));
+					if (lifeFade <= 0.001) continue; // se desvanece por completo y se destruye
+				}
+
 				var fade = (copyCount > 1) ? (1.0 - (c / copyCount) * 0.5) : 1.0;
-				copyData.alpha *= alphaVal * fade * currentValue;
+				copyData.alpha *= alphaVal * fade * lifeFade * currentValue;
 
 				copyData.finalizeColorFill();
 				extra.push(copyData);
