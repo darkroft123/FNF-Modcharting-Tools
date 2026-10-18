@@ -446,8 +446,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 	public var inst:FlxSound;
 
-	public var opponentMode:Bool = false;
-
 	#if (PSYCH && PSYCHVERSION >= "0.7.1")
 	var backupGpu:Bool;
 	#end
@@ -1527,9 +1525,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				#else
 				var daNoteData:Int = Std.int(songNotes[1] % 4);
 				var gottaHitNote:Bool = section.mustHitSection;
-				if (songNotes[1] > 3 && !opponentMode)
-					gottaHitNote = !section.mustHitSection;
-				else if (songNotes[1] <= 3 && opponentMode)
+				if (songNotes[1] > 3)
 					gottaHitNote = !section.mustHitSection;
 				#end
 
@@ -2677,7 +2673,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 
 	public var check_lanePaths:FlxUICheckBox;
-	var check_opponentSide:FlxUICheckBox;
 
 	public function setupPlayfieldUI() {
 		var tab_group = new FlxUI(null, UI_box);
@@ -2834,53 +2829,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			}
 		};
 
-		check_opponentSide = new FlxUICheckBox(
-			check_lanePaths.x,
-			check_lanePaths.y + 25,
-			null,
-			null,
-			"Opponent Side Preview",
-			100
-		);
-		check_opponentSide.checked = false;
-		check_opponentSide.callback = function() {
-			opponentMode = check_opponentSide.checked;
-
-			playerStrums.clear();
-			opponentStrums.clear();
-			strumLineNotes.clear();
-
-			if (check_opponentSide.checked) {
-				if (check_middlescroll.checked) {
-					generateStaticArrows(0.5, false);
-					generateStaticArrows(50, true);
-				} else {
-					generateStaticArrows(0, false);
-					generateStaticArrows(1, true);
-				}
-			} else {
-				if (check_middlescroll.checked) {
-					generateStaticArrows(50, false);
-					generateStaticArrows(0.5, true);
-				} else {
-					generateStaticArrows(0, true);
-					generateStaticArrows(1);
-				}
-			}
-
-			NoteMovement.getDefaultStrumPosEditor(this);
-
-			unspawnNotes = [];
-			loadedNotes = [];
-			clearNotesAfter(0);
-			generateSong(null);
-			loadedNotes = unspawnNotes.copy();
-			dirtyUpdateNotes = true;
-			dirtyUpdateEvents = true;
-		};
-
 		#if LEATHER
-		check_previewStage = new FlxUICheckBox(check_opponentSide.x, check_opponentSide.y + 25, null, null, "Show Bg & Characters (Preview)", 100);
+		check_previewStage = new FlxUICheckBox(check_lanePaths.x, check_lanePaths.y + 25, null, null, "Show Bg & Characters (Preview)", 100);
 		check_previewStage.checked = false;
 		check_previewStage.callback = function() {
 			if (check_previewStage.checked) {
@@ -2941,7 +2891,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		tab_group.add(check_middlescroll);
 		tab_group.add(check_lanePaths);
 		tab_group.add(check_downscroll);
-		tab_group.add(check_opponentSide);
 		#if LEATHER tab_group.add(check_previewStage); #end
 		#if (PSYCH && PSYCHVERSION >= "0.7.3") tab_group.add(check_mute_opponent_vocals); #end
 

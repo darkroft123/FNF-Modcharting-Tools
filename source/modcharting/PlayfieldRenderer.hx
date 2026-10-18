@@ -66,8 +66,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	public var lanePaths:Array<LanePathRenderer> = [];
 	public var showLanePaths:Bool = true;
 
-	var _mirrored:Bool = false;
-
 	var _notePositions:Array<NotePositionData> = [];
 
 	private function get_modifiers():Map<String, Modifier> {
@@ -105,17 +103,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 	public inline function addNewPlayfield(?x:Float = 0, ?y:Float = 0, ?z:Float = 0, ?alpha:Float = 1) {
 		playfields.push(new Playfield(x, y, z, alpha));
-	}
-
-	public function setMirrored(mirrored:Bool) {
-		_mirrored = mirrored;
-		if (!mirrored) return;
-
-		var screenCenterX = flixel.FlxG.width * 0.5;
-		for (i in 0...NoteMovement.defaultStrumX.length) {
-			var strumWidth = NoteMovement.arrowSizes[i] > 0 ? NoteMovement.arrowSizes[i] : 112;
-			NoteMovement.defaultStrumX[i] = screenCenterX + (screenCenterX - NoteMovement.defaultStrumX[i] - strumWidth);
-		}
 	}
 
 	override function update(elapsed:Float) {
