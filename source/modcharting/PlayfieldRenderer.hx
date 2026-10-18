@@ -585,11 +585,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			-(daNote.width / 2), yOffsetThingy
 			- (NoteMovement.arrowSizes[noteData.lane] / 2));
 
-		if (isDownscroll && daNote.isSustainNote) {
-			var sustainH = daNote.frameHeight * daNote.sustainScaleY;
-			thisNotePos.y += (sustainH - Note.swagWidth);
-		}
-
 		var timeToNextSustain = getNoteSustainDuration(daNote);
 		if (noteData.noteDist < 0) timeToNextSustain *= -1;
 
