@@ -238,10 +238,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 	public function getNoteCurPos(noteIndex:Int, strumTimeOffset:Float = 0) {
 		var daNote = notes.members[noteIndex];
-		if (daNote.isSustainNote && !isDownscroll)
+		if (daNote.isSustainNote)
 			strumTimeOffset += getNoteSustainDuration(daNote);
-		if (daNote.isSustainNote && isDownscroll)
-			strumTimeOffset -= getNoteSustainDuration(daNote);
 		var distance = (Conductor.songPosition - daNote.strumTime) + strumTimeOffset;
 		return distance * daNote.speed;
 	}
@@ -587,22 +585,29 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			-(daNote.width / 2), yOffsetThingy
 			- (NoteMovement.arrowSizes[noteData.lane] / 2));
 
-		var timeToNextSustain = getNoteSustainDuration(daNote);
-		if (noteData.noteDist < 0) timeToNextSustain *= -1;
+		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+		var isHoldEnd = animName.endsWith("end");
 
-		var nextHalfNotePos:NotePositionData;
-		var nextNotePos:NotePositionData;
-		#if (PSYCH && !(PSYCHVERSION >= "0.7"))
-		nextHalfNotePos = getSustainPoint(noteData, timeToNextSustain * 0.5);
-		nextNotePos = getSustainPoint(noteData, timeToNextSustain);
-		#else
-		nextHalfNotePos = isDownscroll ? getSustainPoint(noteData,
-			timeToNextSustain * 0.458) : getSustainPoint(noteData, timeToNextSustain * 0.548);
-		nextNotePos = isDownscroll ? getSustainPoint(noteData,
-			timeToNextSustain + 2.2) : getSustainPoint(noteData, timeToNextSustain - 2.2);
-		#end
+		var stepDuration = getNoteSustainDuration(daNote);
+		var timeToNextSustain = stepDuration;
 
-		var flipGraphic = (noteData.noteDist > 0) != isDownscroll;
+		if (isHoldEnd) {
+			// Holdend cap has fixed unscaled frame height and should NEVER stretch.
+			var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
+			var capHeight:Float = daNote.frameHeight * baseScale;
+			var speedFactor:Float = daNote.speed * 0.45;
+			var capDuration:Float = (speedFactor > 0.001) ? (capHeight / speedFactor) : stepDuration;
+			if (capDuration < stepDuration)
+				timeToNextSustain = capDuration;
+		}
+
+		// Trail extends backwards in song distance along the scroll path.
+		// For body pieces, add 1.5ms overlap to eliminate subpixel rasterizer gaps.
+		var timeOffsetEnd:Float = isHoldEnd ? -timeToNextSustain : -(timeToNextSustain + 1.5);
+		var nextHalfNotePos:NotePositionData = getSustainPoint(noteData, -timeToNextSustain * 0.5);
+		var nextNotePos:NotePositionData = getSustainPoint(noteData, timeOffsetEnd);
+
+		var flipGraphic = (noteData.noteDist > 0);
 
 		// mod/bound to 360, add 360 for negative angles, mod again just in case
 		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
@@ -610,7 +615,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		try {
 			var savedMeshShader = daNote.mesh.shader;
-			daNote.mesh.shader = (SustainStrip.showHitboxContainers || noteData.hasColorFill) ? null : daNote.shader;
+			daNote.mesh.shader = noteData.hasColorFill ? null : daNote.shader; // colorfill can't show through a shader
 			daNote.mesh.constructVertices(noteData, thisNotePos, nextHalfNotePos, nextNotePos, flipGraphic, reverseClip);
 			daNote.mesh.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
 			daNote.mesh.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
