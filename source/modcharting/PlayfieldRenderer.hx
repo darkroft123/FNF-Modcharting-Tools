@@ -376,11 +376,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			thisNotePos = _vec3;
 		}
 		
-		if(daNote.isSustainNote){
-			if(!daNote.animation.curAnim.name.endsWith("end")){
-				noteData.scaleY *= sustainScaleMultiplier(daNote, noteData.lane);
-			}
-		}
+		if (daNote.isSustainNote && !daNote.animation.curAnim.name.endsWith("end"))
+			noteData.scaleY *= sustainScaleMultiplier(daNote, noteData.lane);
 
 		noteData.x = thisNotePos.x;
 		noteData.y = thisNotePos.y;
@@ -441,17 +438,13 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isHoldEnd = animName.endsWith("end");
 
-		// Sprite-drawn sustains (optimized modcharts, or the mesh fallback) are
-		// not stretched, so they sit at the note's own position just like a
-		// normal note. The engine note offset is neutralized below.
 		var thisNotePos:openfl.geom.Vector3D;
 		if (changeX) {
 			_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
 				noteData.y + (daNote.height / 2), noteData.z * 0.001);
 			thisNotePos = ModchartUtil.calculatePerspective(_vec3,
 				ModchartUtil.defaultFOV * (Math.PI / 180),
-				-(daNote.width / 2),
-				-(daNote.height / 2));
+				-(daNote.width / 2), -(daNote.height / 2));
 		} else {
 			_vec3.setTo(noteData.x, noteData.y, 0);
 			thisNotePos = _vec3;
@@ -545,15 +538,12 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var songSpeed = daNote.speed;
 		var lane = noteData.lane;
 
-		// makes the sustain match the center of the parent note when at weird angles
-		var yOffsetThingy = (NoteMovement.arrowSizes[lane] / 2);
-
+		var arrowSize = NoteMovement.arrowSizes[noteData.lane] / 2;
 		_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
-			noteData.y + ((NoteMovement.arrowSizes[noteData.lane] / 2)), noteData.z * 0.001);
+			noteData.y + arrowSize, noteData.z * 0.001);
 		var thisNotePos = ModchartUtil.calculatePerspective(_vec3,
 			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(daNote.width / 2), yOffsetThingy
-			- (NoteMovement.arrowSizes[noteData.lane] / 2));
+			-(daNote.width / 2), 0);
 
 		var timeToNextSustain = ModchartUtil.getFakeCrochetAt(daNote.strumTime) / 4;
 		if (noteData.noteDist < 0) timeToNextSustain *= -1;
@@ -666,7 +656,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			result.y + (NoteMovement.arrowSizes[result.lane] / 2), result.z * 0.001);
 		var finalPos = ModchartUtil.calculatePerspective(_vec3b,
 			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(daNote.width / 2), arrowSize - (NoteMovement.arrowSizes[result.lane] / 2));
+			-(daNote.width / 2), 0);
 		result.x = finalPos.x;
 		result.y = finalPos.y;
 		result.z = finalPos.z;
