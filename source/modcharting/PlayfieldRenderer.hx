@@ -615,7 +615,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				nextNotePos = getSustainPoint(noteData, capTime);
 				#else
 				nextHalfNotePos = isDownscroll ? getSustainPoint(noteData, capTime * 0.5) : getSustainPoint(noteData, capTime * 0.5);
-				nextNotePos = isDownscroll ? getSustainPoint(noteData, capTime + 2.2) : getSustainPoint(noteData, capTime - 2.2);
+				nextNotePos = isDownscroll ? getSustainPoint(noteData, capTime) : getSustainPoint(noteData, capTime - 2.2);
 				#end
 			}
 		}
