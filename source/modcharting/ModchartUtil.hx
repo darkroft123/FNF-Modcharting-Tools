@@ -107,7 +107,18 @@ class ModchartUtil {
 		return currentFakeCrochet;
 	}
 
-	public static var zNear:Float = 0;
+	public static function getFakeCrochetAt(time:Float):Float {
+		#if LEATHER
+		var bpm = Conductor.getBPMAtTime(time);
+		if (bpm > 0) return (60 / bpm) * 1000;
+		#end
+		var bpm = PlayState.SONG != null ? PlayState.SONG.bpm : Conductor.bpm;
+		var map = Conductor.bpmChangeMap;
+		if (map != null)
+			for (change in map)
+				if (change.songTime <= time) bpm = change.bpm; else break;
+		return (60 / bpm) * 1000;
+	}
 	public static var zFar:Float = 100;
 	public static var defaultFOV:Float = 90;
 
