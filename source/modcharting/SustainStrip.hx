@@ -2,6 +2,8 @@ package modcharting;
 
 import flixel.graphics.tile.FlxDrawTrianglesItem.DrawData;
 import openfl.geom.Vector3D;
+import openfl.display.BitmapData;
+import openfl.geom.Rectangle;
 #if LEATHER
 import game.Note;
 #elseif (PSYCH && PSYCHVERSION >= "0.7")
@@ -13,6 +15,60 @@ import flixel.FlxStrip;
 
 class SustainStrip extends FlxStrip
 {
+    public static var showHitboxContainers:Bool = true;
+    private static var containerCache:Map<String, BitmapData> = new Map();
+
+    public static function getHitboxContainerGraphic(lane:Int, isHoldEnd:Bool):BitmapData
+    {
+        var key:String = (lane % 4) + "_" + (isHoldEnd ? "end" : "hold");
+        if (containerCache.exists(key))
+            return containerCache.get(key);
+
+        var size:Int = 128;
+        var b:BitmapData = new BitmapData(size, size, true, 0x00000000);
+
+        // Lane colors: 0: purple, 1: blue/cyan, 2: green, 3: red
+        var laneColors:Array<Int> = [0xFFC24B99, 0xFF00FFFF, 0xFF12FA05, 0xFFF9393F];
+        var col:Int = laneColors[lane % 4];
+
+        // Semi-transparent background
+        var fillAlpha:Int = isHoldEnd ? 0x55000000 : 0x38000000;
+        var fillColor:Int = (col & 0x00FFFFFF) | fillAlpha;
+        b.fillRect(new Rectangle(0, 0, size, size), fillColor);
+
+        // Outer container border (4px)
+        var borderThick:Int = 4;
+        b.fillRect(new Rectangle(0, 0, size, borderThick), col);
+        b.fillRect(new Rectangle(0, size - borderThick, size, borderThick), col);
+        b.fillRect(new Rectangle(0, 0, borderThick, size), col);
+        b.fillRect(new Rectangle(size - borderThick, 0, borderThick, size), col);
+
+        // Center lines/grid to visualize the container alignment
+        var midX:Int = Std.int(size / 2);
+        var midY:Int = Std.int(size / 2);
+        b.fillRect(new Rectangle(4, midY - 1, size - 8, 2), (col & 0x00FFFFFF) | 0x88000000);
+        b.fillRect(new Rectangle(midX - 1, 4, 2, size - 8), (col & 0x00FFFFFF) | 0x88000000);
+
+        if (isHoldEnd)
+        {
+            // Flat connection edge (top) marked with solid white bar
+            b.fillRect(new Rectangle(0, 0, size, 6), 0xFFFFFFFF);
+            // Cap edge (bottom) marked with bright warning/cap block
+            b.fillRect(new Rectangle(12, size - 22, size - 24, 18), 0xFFFFEE00);
+            b.fillRect(new Rectangle(28, size - 36, size - 56, 12), 0xFFFFCC00);
+            b.fillRect(new Rectangle(44, size - 46, size - 88, 8), 0xFFFFFFFF);
+        }
+        else
+        {
+            // Hold body: connection edge markers on both ends
+            b.fillRect(new Rectangle(0, 0, size, 4), 0xFFFFFFFF);
+            b.fillRect(new Rectangle(0, size - 4, size, 4), 0xFFFFFFFF);
+        }
+
+        containerCache.set(key, b);
+        return b;
+    }
+
     public static final noteUV:Array<Float> = [
         0,0, //top left
         1,0, //top right
@@ -33,24 +89,39 @@ class SustainStrip extends FlxStrip
 
     public function updateGraphic(?force:Bool = false):Void {
         if (daNote == null) return;
+
+        var animName:String = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+        var isHoldEnd:Bool = animName.endsWith("end");
+
+        if (showHitboxContainers)
+        {
+            var bmp = getHitboxContainerGraphic(daNote.noteData, isHoldEnd);
+            loadGraphic(bmp);
+            shader = null;
+            antialiasing = false;
+            loadedValidGraphic = true;
+            loadedFrame = null;
+            return;
+        }
+
         var frameChanged:Bool = (daNote.frame != loadedFrame);
         if (!force && !frameChanged && loadedValidGraphic && graphic != null && graphic.bitmap != null && graphic.bitmap.width > 1 && graphic.bitmap.height > 1)
             return;
 
         try {
             var pixels = daNote.updateFramePixels();
-        if (pixels == null) {
-            var frame = daNote.frame;
-            if (frame != null && frame.parent != null && frame.parent.bitmap != null)
-                pixels = frame.paint();
-        }
-        if (pixels != null && pixels.width > 1 && pixels.height > 1) {
-            loadGraphic(pixels);
-            shader = daNote.shader;
-            antialiasing = daNote.antialiasing;
-            loadedValidGraphic = true;
-            loadedFrame = daNote.frame;
-        }
+            if (pixels == null) {
+                var frame = daNote.frame;
+                if (frame != null && frame.parent != null && frame.parent.bitmap != null)
+                    pixels = frame.paint();
+            }
+            if (pixels != null && pixels.width > 1 && pixels.height > 1) {
+                loadGraphic(pixels);
+                shader = daNote.shader;
+                antialiasing = daNote.antialiasing;
+                loadedValidGraphic = true;
+                loadedFrame = daNote.frame;
+            }
         } catch (e:Dynamic) {}
     }
 
@@ -70,8 +141,6 @@ class SustainStrip extends FlxStrip
     }
 
     static inline function safeScale(z:Float):Float {
-        // when z is 0 (no perspective), avoid division by zero
-        // return 1.0 so the sustain renders at normal width
         return (z > -0.001 && z < 0.001) ? 1.0 : (1.0 / -z);
     }
 

@@ -602,24 +602,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			timeToNextSustain + 2.2) : getSustainPoint(noteData, timeToNextSustain - 2.2);
 		#end
 
-		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
-		if (animName.endsWith("end")) {
-			var stepLen = 0.45 * Math.abs(timeToNextSustain) * Math.abs(daNote.speed);
-			var capLen = daNote.frameHeight * noteData.scaleY;
-			if (stepLen > 0.0001 && capLen > 0.0001) {
-				var capTime = timeToNextSustain * (capLen / stepLen);
-				NotePositionData.recycle(nextHalfNotePos);
-				NotePositionData.recycle(nextNotePos);
-				#if (PSYCH && !(PSYCHVERSION >= "0.7"))
-				nextHalfNotePos = getSustainPoint(noteData, capTime * 0.5);
-				nextNotePos = getSustainPoint(noteData, capTime);
-				#else
-				nextHalfNotePos = isDownscroll ? getSustainPoint(noteData, capTime * 0.5) : getSustainPoint(noteData, capTime * 0.5);
-				nextNotePos = isDownscroll ? getSustainPoint(noteData, capTime) : getSustainPoint(noteData, capTime - 2.2);
-				#end
-			}
-		}
-
 		var flipGraphic = (noteData.noteDist > 0) != isDownscroll;
 
 		// mod/bound to 360, add 360 for negative angles, mod again just in case
@@ -628,7 +610,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		try {
 			var savedMeshShader = daNote.mesh.shader;
-			daNote.mesh.shader = noteData.hasColorFill ? null : daNote.shader; // colorfill can't show through a shader
+			daNote.mesh.shader = (SustainStrip.showHitboxContainers || noteData.hasColorFill) ? null : daNote.shader;
 			daNote.mesh.constructVertices(noteData, thisNotePos, nextHalfNotePos, nextNotePos, flipGraphic, reverseClip);
 			daNote.mesh.scrollFactor.set(noteData.cameraScrollX, noteData.cameraScrollY);
 			daNote.mesh.cameras = (noteData.camera != null) ? [noteData.camera] : this.cameras;
