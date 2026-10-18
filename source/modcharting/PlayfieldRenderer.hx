@@ -196,7 +196,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 
 		var noteData:NotePositionData = NotePositionData.get();
 		noteData.setupNote(noteX, noteY, noteZ, lane, noteScaleX, noteScaleY, noteSkewX, noteSkewY, playfieldIndex, noteAlpha, curPos, noteDist,
-			incomingAngle[0], incomingAngle[1], daNote.strumTime, noteIndex);
+			incomingAngle[0], incomingAngle[1], daNote.strumTime, noteIndex, daNote.isSustainNote);
 		playfields[playfieldIndex].applyOffsets(noteData);
 		return noteData;
 	}
@@ -294,16 +294,17 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		}
 		// sort by z before drawing
 		if (hasDepth) {
-			_notePositions.sort(function(a, b) {
-				if (a.z < b.z)
-					return -1;
-				else if (a.z > b.z)
-					return 1;
-				else
-					return 0;
-			});
+			haxe.ds.ArraySort.sort(_notePositions, sortByZ);
 		}
 		return _notePositions;
+	}
+
+	static function sortByZ(a:NotePositionData, b:NotePositionData):Int {
+		if (a.z < b.z)
+			return -1;
+		else if (a.z > b.z)
+			return 1;
+		return 0;
 	}
 
 	public inline function drawStrum(noteData:NotePositionData) {
@@ -322,22 +323,20 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		SustainRenderer.drawSustainAsSprite(this, noteData);
 	}
 
-
-    public function drawStuff(notePositions:Array<NotePositionData>) {
-        for (noteData in notePositions) {
-            if (noteData.isStrum)
-                drawStrum(noteData);
-        }
-        for (noteData in notePositions) {
-            if (!noteData.isStrum && notes.members[noteData.index].isSustainNote)
-                drawSustainNote(noteData);
-        }
-
-        for (noteData in notePositions) {
-            if (!noteData.isStrum && !notes.members[noteData.index].isSustainNote)
-                drawNote(noteData);
-        }
-    }
+	public function drawStuff(notePositions:Array<NotePositionData>) {
+		for (noteData in notePositions) {
+			if (noteData.isStrum)
+				drawStrum(noteData);
+		}
+		for (noteData in notePositions) {
+			if (noteData.isSustain)
+				drawSustainNote(noteData);
+		}
+		for (noteData in notePositions) {
+			if (!noteData.isStrum && !noteData.isSustain)
+				drawNote(noteData);
+		}
+	}
 
 	public inline function getSustainPoint(noteData:NotePositionData, timeOffset:Float):NotePositionData {
 		return SustainRenderer.getSustainPoint(this, noteData, timeOffset);

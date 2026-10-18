@@ -132,7 +132,8 @@ class ModTable
         {
             var modList:Array<Modifier> = table[pf][lane];
             for (mod in modList) {
-                mod.getStrumPath(noteData, lane, pf);
+                if (mod.currentValue != mod.baseValue)
+                    mod.getStrumPath(noteData, lane, pf);
             }
         }
     }
@@ -142,7 +143,8 @@ class ModTable
         {
             var modList:Array<Modifier> = table[pf][lane];
             for (mod in modList) {
-                mod.getNotePath(noteData, lane, curPos, pf);
+                if (mod.currentValue != mod.baseValue)
+                    mod.getNotePath(noteData, lane, curPos, pf);
             }
         }
     }
@@ -151,8 +153,10 @@ class ModTable
         if (table[pf] != null && table[pf][lane] != null)
         {
             var modList:Array<Modifier> = table[pf][lane];
-            for (mod in modList)
-                noteDist = mod.getNoteDist(noteDist, lane, 0, pf);
+            for (mod in modList) {
+                if (mod.currentValue != mod.baseValue)
+                    noteDist = mod.getNoteDist(noteDist, lane, 0, pf);
+            }
         }
         return noteDist;
     }
@@ -161,8 +165,10 @@ class ModTable
         if (table[pf] != null && table[pf][lane] != null)
         {
             var modList:Array<Modifier> = table[pf][lane];
-            for (mod in modList)
-                curPos = mod.getNoteCurPos(lane, curPos, pf);
+            for (mod in modList) {
+                if (mod.currentValue != mod.baseValue)
+                    curPos = mod.getNoteCurPos(lane, curPos, pf);
+            }
         }
         return curPos;
     }
@@ -175,9 +181,12 @@ class ModTable
             var modList:Array<Modifier> = table[pf][lane];
             for (mod in modList)
             {
-                var ang = mod.getIncomingAngle(lane, curPos, pf);
-                _incomingAngle[0] += ang[0];
-                _incomingAngle[1] += ang[1];
+                if (mod.currentValue != mod.baseValue)
+                {
+                    var ang = mod.getIncomingAngle(lane, curPos, pf);
+                    _incomingAngle[0] += ang[0];
+                    _incomingAngle[1] += ang[1];
+                }
             }
         }
         return _incomingAngle;

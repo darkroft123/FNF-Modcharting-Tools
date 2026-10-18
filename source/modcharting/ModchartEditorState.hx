@@ -885,7 +885,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 		for (i in 0...beatTexts.length) {
 			beatTexts[i].x = -songPosPixelPos + (gridSize * 4 * (i + 1)) - 16;
-			beatTexts[i].text = "" + (curBeat + i);
+			var beatStr = Std.string(curBeat + i);
+			if (beatTexts[i].text != beatStr)
+				beatTexts[i].text = beatStr;
 		}
 		var eventIsSelected:Bool = false;
 		for (i in 0...eventSprites.members.length) {
@@ -1048,7 +1050,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				time /= PlayState.SONG.speed;
 
 			while (unspawnNotes.length > 0 && unspawnNotes[0].strumTime - Conductor.songPosition < time) {
-				var dunceNote:Note = unspawnNotes[0];
+				var dunceNote:Note = unspawnNotes.shift();
 				dunceNote.active = true;
 				dunceNote.visible = true;
 				dunceNote.wasGoodHit = false;
@@ -1056,8 +1058,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				#if PSYCH
 				dunceNote.spawned = true;
 				#end
-				var index:Int = unspawnNotes.indexOf(dunceNote);
-				unspawnNotes.splice(index, 1);
 			}
 		}
 
@@ -1271,18 +1271,26 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			+ FlxMath.roundDecimal(curDecStep, 2)
 			+ "\n";
 
-		var leText = "Active Modifiers: \n";
-		for (modName => mod in playfieldRenderer.modifierTable.modifiers) {
+		var leText = new StringBuf();
+		leText.add("Active Modifiers: \n");
+		for (mod in playfieldRenderer.modifierTable.modsArray) {
 			if (mod.currentValue != mod.baseValue) {
-				leText += modName + ": " + FlxMath.roundDecimal(mod.currentValue, 2);
+				leText.add(mod.tag);
+				leText.add(": ");
+				leText.add(FlxMath.roundDecimal(mod.currentValue, 2));
 				for (subModName => subMod in mod.subValues) {
-					leText += "    " + subModName + ": " + FlxMath.roundDecimal(subMod.value, 2);
+					leText.add("    ");
+					leText.add(subModName);
+					leText.add(": ");
+					leText.add(FlxMath.roundDecimal(subMod.value, 2));
 				}
-				leText += "\n";
+				leText.add("\n");
 			}
 		}
 
-		activeModifiersText.text = leText;
+		var formattedMods = leText.toString();
+		if (activeModifiersText.text != formattedMods)
+			activeModifiersText.text = formattedMods;
 	}
 
 	function regenerateLanePaths() {

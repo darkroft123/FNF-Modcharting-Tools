@@ -232,13 +232,17 @@ class ModchartUtil {
 	**/
 	public static function getCartesianCoords3D(theta:Float, phi:Float, radius:Float):Vector3D {
 		var pos = _cachedVec3D;
+		if (phi == 0) {
+			pos.x = 0;
+			pos.y = radius;
+			pos.z = 0;
+			return pos;
+		}
 		var rad = FlxAngle.TO_RAD;
-		pos.x = Math.cos(theta * rad) * Math.sin(phi * rad);
-		pos.y = Math.cos(phi * rad);
-		pos.z = Math.sin(theta * rad) * Math.sin(phi * rad);
-		pos.x *= radius;
-		pos.y *= radius;
-		pos.z *= radius;
+		var sinPhi = Math.sin(phi * rad);
+		pos.x = Math.cos(theta * rad) * sinPhi * radius;
+		pos.y = Math.cos(phi * rad) * radius;
+		pos.z = Math.sin(theta * rad) * sinPhi * radius;
 
 		return pos;
 	}
