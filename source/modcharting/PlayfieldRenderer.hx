@@ -474,9 +474,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isHoldEnd = animName.endsWith("end");
 
-		// Sprite-drawn sustains (optimized modcharts, or the mesh fallback) are
-		// not stretched, so they sit at the note's own position just like a
-		// normal note. The engine note offset is neutralized below.
 		var thisNotePos:openfl.geom.Vector3D;
 		if (changeX) {
 			_vec3.setTo(noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, instance),
@@ -603,6 +600,42 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			timeToNextSustain + 2.2) : getSustainPoint(noteData, timeToNextSustain - 2.2);
 		#end
 
+		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+		if (animName.endsWith("end")) {
+			var stepLen = 0.45 * Math.abs(timeToNextSustain) * Math.abs(daNote.speed);
+			var capLen = daNote.frameHeight * noteData.scaleY;
+			if (stepLen > 0.0001 && capLen > 0.0001) {
+				var capTime = timeToNextSustain * (capLen / stepLen);
+				NotePositionData.recycle(nextHalfNotePos);
+				NotePositionData.recycle(nextNotePos);
+				#if (PSYCH && !(PSYCHVERSION >= "0.7"))
+				nextHalfNotePos = getSustainPoint(noteData, capTime * 0.5);
+				nextNotePos = getSustainPoint(noteData, capTime);
+				#else
+				nextHalfNotePos = isDownscroll ? getSustainPoint(noteData, capTime * 0.458) : getSustainPoint(noteData, capTime * 0.548);
+				nextNotePos = isDownscroll ? getSustainPoint(noteData, capTime + 2.2) : getSustainPoint(noteData, capTime - 2.2);
+				#end
+			}
+		}
+
+		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+		if (animName.endsWith("end")) {
+			var stepLen = 0.45 * Math.abs(timeToNextSustain) * Math.abs(daNote.speed);
+			var capLen = daNote.frameHeight * noteData.scaleY;
+			if (stepLen > 0.0001 && capLen > 0.0001) {
+				var capTime = timeToNextSustain * (capLen / stepLen);
+				NotePositionData.recycle(nextHalfNotePos);
+				NotePositionData.recycle(nextNotePos);
+				#if (PSYCH && !(PSYCHVERSION >= "0.7"))
+				nextHalfNotePos = getSustainPoint(noteData, capTime * 0.5);
+				nextNotePos = getSustainPoint(noteData, capTime);
+				#else
+				nextHalfNotePos = isDownscroll ? getSustainPoint(noteData, capTime * 0.458) : getSustainPoint(noteData, capTime * 0.548);
+				nextNotePos = isDownscroll ? getSustainPoint(noteData, capTime + 2.2) : getSustainPoint(noteData, capTime - 2.2);
+				#end
+			}
+		}
+
 		var flipGraphic = (noteData.noteDist > 0) != isDownscroll;
 
 		// mod/bound to 360, add 360 for negative angles, mod again just in case
@@ -636,12 +669,9 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			drawSustainAsSprite(noteData);
 		}
 
-		#if debug
 		trace('SUSTAIN idx=${noteData.index} strumTime=${daNote.strumTime} isDown=${isDownscroll} isEnd=${animName.endsWith("end")} thisPos=(${thisNotePos.x},${thisNotePos.y})');
-		#end
 
 		// Debug hitbox: draw a rectangle around the sustain mesh
-		#if debug
 		if (daNote.mesh != null && daNote.mesh.vertices != null && daNote.mesh.vertices.length >= 12) {
 			var minX = daNote.mesh.vertices[0];
 			var maxX = daNote.mesh.vertices[0];
@@ -657,7 +687,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			}
 			trace('  HITBOX idx=${noteData.index} minX=${minX} maxX=${maxX} minY=${minY} maxY=${maxY} w=${maxX-minX} h=${maxY-minY}');
 		}
-		#end
 
 		NotePositionData.recycle(nextHalfNotePos);
 		NotePositionData.recycle(nextNotePos);
