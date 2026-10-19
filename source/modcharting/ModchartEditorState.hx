@@ -1932,252 +1932,138 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	}
 
 	// Thanks to glowsoony for the idea lol
+	static var _modifierExplainMap:Map<String,String> = null;
 	public function modifierExplain(modifiersName:String):String {
-		switch modifiersName {
-			case 'DrunkXModifier':
-				return "Modifier used to do a wave at X poss of the notes and targets";
-			case 'DrunkYModifier':
-				return "Modifier used to do a wave at Y poss of the notes and targets";
-			case 'DrunkZModifier':
-				return "Modifier used to do a wave at Z (Far, Close) poss of the notes and targets";
-			case 'SchmovinDrunkXModifier':
-				return "Port of the drunk modifier from Schmovin (X axis)";
-			case 'SchmovinDrunkYModifier':
-				return "Port of the drunk modifier from Schmovin (Y axis)";
-			case 'SchmovinDrunkZModifier':
-				return "Port of the drunk modifier from Schmovin (Z axis)";
-			case 'SchmovinTipsyXModifier':
-				return "Port of the tipsy modifier from Schmovin (X axis)";
-			case 'SchmovinTipsyYModifier':
-				return "Port of the tipsy modifier from Schmovin (Y axis)";
-			case 'SchmovinTipsyZModifier':
-				return "Port of the tipsy modifier from Schmovin (Z axis)";
-			case 'TipsyXModifier':
-				return "Modifier similar to DrunkX but don't affect notes poss";
-			case 'TipsyYModifier':
-				return "Modifier similar to DrunkY but don't affect notes poss";
-			case 'TipsyZModifier':
-				return "Modifier similar to DrunkZ but don't affect notes poss";
-			case 'ReverseModifier':
-				return "Flip the scroll type (Upscroll/Downscroll)";
-			case 'SplitModifier':
-				return "Flip the scroll type (HalfUpscroll/HalfDownscroll)";
-			case 'CrossModifier':
-				return "Flip the scroll type (Upscroll/Downscroll/Downscroll/Upscroll)";
-			case 'AlternateModifier':
-				return "Flip the scroll type (Upscroll/Downscroll/Upscroll/Downscroll)";
-			case 'IncomingAngleModifier':
-				return "Modifier that changes how notes come to the target (if X and Y aplied it will use Z)";
-			case 'RotateModifier':
-				return "Modifier used to rotate the lanes poss between a value aplied with rotatePoint (can be used with Y and X)";
-			case 'StrumLineRotateModifier':
-				return "Modifier similar to RotateModifier but this one doesn't need a extra value (can be used with Y, X and Z)";
-			case 'BumpyModifier':
-				return "Modifier used to make notes jump a bit in their own Perspective poss";
-			case 'XModifier':
-				return "Moves notes and targets X";
-			case 'XMModifier':
-				return "Moves notes and targets X (Only activates in middlescroll)";
-			case 'YModifier':
-				return "Moves notes and targets Y";
-			case 'YDModifier':
-				return "Moves notes and targets Y (Automatically reverses in downscroll)";
-			case 'ZModifier':
-				return "Moves notes and targets Z (Far, Close)";
-			case 'PitchModifier':
-				return "Rotates notes around the X axis";
-			case 'YawModifier':
-				return "Rotates notes around the Y axis";
-			case 'ConfusionModifier':
-				return "Rotates notes around the Z axis";
-			case 'DizzyModifier':
-				return "Changes notes angle making a visual on them";
-			case 'ScaleModifier':
-				return "Modifier used to make notes and targets bigger or smaller";
-			case 'ScaleXModifier':
-				return "Modifier used to make notes and targets bigger or smaller (Only in X)";
-			case 'ScaleYModifier':
-				return "Modifier used to make notes and targets bigger or smaller (Only in Y)";
-			case 'SpeedModifier':
-				return "Modifier used to make notes be faster or slower";
-			case 'StealthModifier':
-				return "Modifier used to change notes and targets alpha";
-			case 'NoteStealthModifier':
-				return "Modifier used to change notes alpha";
-			case 'LaneStealthModifier':
-				return "Modifier used to change targets alpha";
-			case 'InvertModifier':
-				return "Modifier used to invert notes and targets X poss (down/left/right/up)";
-			case 'FlipModifier':
-				return "Modifier used to flip notes and targets X poss (right/up/down/left)";
-			case 'MiniModifier':
-				return "Modifier similar to ScaleModifier but this one does Z perspective";
-			case 'ShrinkModifier':
-				return "Modifier used to add a boost of the notes (the more value the less scale it will be at the start)";
-			case 'BeatXModifier':
-				return "Modifier used to move notes and targets X with a small jump effect";
-			case 'BeatYModifier':
-				return "Modifier used to move notes and targets Y with a small jump effect";
-			case 'BeatZModifier':
-				return "Modifier used to move notes and targets Z with a small jump effect";
-			case 'BounceXModifier':
-				return "Modifier similar to beatX but it only affect notes X with a jump effect";
-			case 'BounceYModifier':
-				return "Modifier similar to beatY but it only affect notes Y with a jump effect";
-			case 'BounceZModifier':
-				return "Modifier similar to beatZ but it only affect notes Z with a jump effect";
-			case 'StrumBounceXModifier':
-				return 'Bounces the strumline across the X axis.';
-			case 'StrumBounceYModifier':
-				return 'Bounces the strumline across the Y axis.';
-			case 'StrumBounceZModifier':
-				return 'Bounces the strumline across the Z axis.';
-			case 'EaseCurveModifier':
-				return "This enables the EaseModifiers";
-			case 'EaseCurveXModifier':
-				return "Modifier similar to IncomingAngleMod (X), it will make notes come faster at X poss";
-			case 'EaseCurveYModifier':
-				return "Modifier similar to IncomingAngleMod (Y), it will make notes come faster at Y poss";
-			case 'EaseCurveZModifier':
-				return "Modifier similar to IncomingAngleMod (X+Y), it will make notes come faster at Z perspective";
-			case 'EaseCurveScaleModifier':
-				return "Modifier similar to All easeCurve, it will make notes scale change, usually next to target";
-			case 'EaseCurveAngleModifier':
-				return "Modifier similar to All easeCurve, it will make notes angle change, usually next to target";
-			case 'InvertSineModifier':
-				return "Modifier used to do a curve in the notes it will be different for notes (Down and Right / Left and Up)";
-			case 'BoostModifier':
-				return "Modifier used to make notes come faster to target";
-			case 'BrakeModifier':
-				return "Modifier used to make notes come slower to target";
-			case 'BoomerangModifier':
-				return "Modifier used to make notes come in reverse to target";
-			case 'WaveingModifier':
-				return "Modifier used to make notes come faster and slower to target";
-			case 'JumpModifier':
-				return "Modifier used to make notes and target jump";
-			case 'WaveXModifier':
-				return "Modifier similar to drunkX but this one will simulate a true wave in X (don't affect the notes)";
-			case 'WaveYModifier':
-				return "Modifier similar to drunkY but this one will simulate a true wave in Y (don't affect the notes)";
-			case 'WaveZModifier':
-				return "Modifier similar to drunkZ but this one will simulate a true wave in Z (don't affect the notes)";
-			case 'TimeStopModifier':
-				return "Modifier used to stop the notes at the top/bottom part of your screen to make it hard to read";
-			case 'StrumAngleModifier':
-				return "Modifier combined between strumRotate, Confusion, IncomingAngleY, making a rotation easily";
-			case 'JumpTargetModifier':
-				return "Modifier similar to jump but only target aplied";
-			case 'JumpNotesModifier':
-				return "Modifier similar to jump but only notes aplied";
-			case 'EaseXModifier':
-				return "Modifier used to make notes go left to right on the screen";
-			case 'EaseYModifier':
-				return "Modifier used to make notes go up to down on the screen";
-			case 'EaseZModifier':
-				return "Modifier used to make notes go far to near right on the screen";
-			case 'HiddenModifier':
-				return "Modifier used to make an alpha boost on notes";
-			case 'SuddenModifier':
-				return "Modifier used to make an alpha brake on notes";
-			case 'VanishModifier':
-				return "Modifier fushion between sudden and hidden";
-			case 'SkewModifier':
-				return "Modifier used to make note effects (skew)";
-			case 'SkewXModifier':
-				return "Modifier based from SkewModifier but only in X";
-			case 'SkewYModifier':
-				return "Modifier based from SkewModifier but only in Y";
-			case 'NotesModifier':
-				return "Modifier based from other modifiers but only affects notes and no targets";
-			case 'LanesModifier':
-				return "Modifier based from other modifiers but only affects targets and no notes";
-			case 'StrumsModifier':
-				return "Modifier based from other modifiers but affects targets and notes";
-			case 'TanDrunkXModifier':
-				return "Modifier similar to drunk but uses tan instead of sin in X";
-			case 'TanDrunkYModifier':
-				return "Modifier similar to drunk but uses tan instead of sin in Y";
-			case 'TanDrunkZModifier':
-				return "Modifier similar to drunk but uses tan instead of sin in Z";
-			case 'TanWaveXModifier':
-				return "Modifier similar to wave but uses tan instead of sin in X";
-			case 'TanWaveYModifier':
-				return "Modifier similar to wave but uses tan instead of sin in Y";
-			case 'TanWaveZModifier':
-				return "Modifier similar to wave but uses tan instead of sin in Z";
-			case 'TwirlModifier':
-				return "Modifier that makes the notes incoming rotating in a circle in X";
-			case 'RollModifier':
-				return "Modifier that makes the notes incoming rotating in a circle in Y";
-			case 'BlinkModifier':
-				return "Modifier that makes the notes alpha go to 0 and go back to 1 constantly";
-			case 'CosecantXModifier':
-				return "Modifier similar to TanDrunk but uses cosecant instead of tan in X";
-			case 'CosecantYModifier':
-				return "Modifier similar to TanDrunk but uses cosecant instead of tan in Y";
-			case 'CosecantZModifier':
-				return "Modifier similar to TanDrunk but uses cosecant instead of tan in Z";
-			case 'TanDrunkAngleModifier':
-				return "Modifier similar to TanDrunk but in angle";
-			case 'DrunkAngleModifier':
-				return "Modifier similar to Drunk but in angle";
-			case 'WaveAngleModifier':
-				return "Modifier similar to Wave but in angle";
-			case 'TanWaveAngleModifier':
-				return "Modifier similar to TanWave but in angle";
-			case 'ShakyNotesModifier':
-				return "Modifier used to make notes shake in their on possition";
-			case 'TordnadoModifier':
-				return "Modifier similar to invertSine, but notes will do their own path instead";
-			case 'ArrowPath':
-				return "This modifier its able to make custom paths for the mods so this should be a very helpful tool";
-			case 'ColorTransformRed':
-				return "Alters the color transform of a note on the red channel (0-255)";
-			case 'ColorTransformGreen':
-				return "Alters the color transform of a note on the green channel (0-255)";
-			case 'ColorTransformBlue':
-				return "Alters the color transform of a note on the blue channel (0-255)";
-			case 'ColorTransformRainbow' | 'ColorTransformRainbowModifier':
-				return "Alters the note color transform with a dynamic rainbow cycle. SubMods: speed, spread.";
-			case 'ColorFillRed':
-				return "Fills the note with solid red color (silhouette effect like setActorColorTrans)";
-			case 'ColorFillGreen':
-				return "Fills the note with solid green color (silhouette effect like setActorColorTrans)";
-			case 'ColorFillBlue':
-				return "Fills the note with solid blue color (silhouette effect like setActorColorTrans)";
-			case 'ColorFillAlpha':
-				return "Controls the blend/alpha intensity of the color fill (0.0 = normal note, 1.0 = solid fill). Can be tweened smoothly.";
-			case 'ColorFillModifier' | 'ColorFill':
-				return "Fills notes with a custom solid color (subvalues: r, g, b, alpha). Silhouette effect like setActorColorTrans.";
-			case 'ColorFillRainbow' | 'ColorFillRainbowModifier':
-				return "Fills notes with a dynamic rainbow silhouette. SubMods: speed, spread, alpha.";
-			case "SpiralXModifier":
-				return "Makes notes move in a spiral (X axis).  Best combined with reverse 0.5 and flip 0.5.";
-			case "SpiralYModifier":
-				return "Makes notes move in a spiral (Y axis).  Best combined with reverse 0.5 and flip 0.5.";
-			case "SpiralZModifier":
-				return "Makes notes move in a spiral (Z axis).  Best combined with reverse 0.5 and flip 0.5.";
-			case "RingModifier":
-				return "Makes notes orbit in a 3D ring/hoop shape. SubMods: speed (rotation speed), amplitude (ring radius).";
-			case "TrailModifier":
-				return "Creates fading ghost trails behind each note as it scrolls. SubMods: segments (ghost count), spacing (distance between ghosts), speed, alpha (starting opacity).";
-			case "CopySpriteModifier":
-				return "Crea copias/trail de la nota arriba del strum al llegar o ser tocada/presionada. SubMods: amount (cantidad, def 1), offsetX, offsetY (def -50), offsetZ, offset, speed, alpha, hitWindow.";
-			case "WormModifier":
-				return "Filas completas de strums fantasma que se extienden a la derecha. SubMods: spacing (separación entre filas), count (total de copias), speed (velocidad de scroll).";
-			case "SawtoothModifier":
-				return "Makes notes move in a sawtooth.";
-			case "DigitalModifier":
-				return "Makes notes move in a digital pattern.";
-			case "ZigZagModifier":
-				return "Makes notes move in a zigzag pattern.";
-			case "SquareModifier":
-				return "Makes notes move in a square.";
-			case "InfiniteFormModifier":
-				return "Makes notes move in an infinity shape. SubMods: speed, amplitude, phase.";
+		if (_modifierExplainMap == null) {
+			_modifierExplainMap = [
+			'DrunkXModifier' => "Modifier used to do a wave at X poss of the notes and targets",
+			'DrunkYModifier' => "Modifier used to do a wave at Y poss of the notes and targets",
+			'DrunkZModifier' => "Modifier used to do a wave at Z (Far, Close) poss of the notes and targets",
+			'SchmovinDrunkXModifier' => "Port of the drunk modifier from Schmovin (X axis)",
+			'SchmovinDrunkYModifier' => "Port of the drunk modifier from Schmovin (Y axis)",
+			'SchmovinDrunkZModifier' => "Port of the drunk modifier from Schmovin (Z axis)",
+			'SchmovinTipsyXModifier' => "Port of the tipsy modifier from Schmovin (X axis)",
+			'SchmovinTipsyYModifier' => "Port of the tipsy modifier from Schmovin (Y axis)",
+			'SchmovinTipsyZModifier' => "Port of the tipsy modifier from Schmovin (Z axis)",
+			'TipsyXModifier' => "Modifier similar to DrunkX but don't affect notes poss",
+			'TipsyYModifier' => "Modifier similar to DrunkY but don't affect notes poss",
+			'TipsyZModifier' => "Modifier similar to DrunkZ but don't affect notes poss",
+			'ReverseModifier' => "Flip the scroll type (Upscroll/Downscroll)",
+			'SplitModifier' => "Flip the scroll type (HalfUpscroll/HalfDownscroll)",
+			'CrossModifier' => "Flip the scroll type (Upscroll/Downscroll/Downscroll/Upscroll)",
+			'AlternateModifier' => "Flip the scroll type (Upscroll/Downscroll/Upscroll/Downscroll)",
+			'IncomingAngleModifier' => "Modifier that changes how notes come to the target (if X and Y aplied it will use Z)",
+			'RotateModifier' => "Modifier used to rotate the lanes poss between a value aplied with rotatePoint (can be used with Y and X)",
+			'StrumLineRotateModifier' => "Modifier similar to RotateModifier but this one doesn't need a extra value (can be used with Y, X and Z)",
+			'BumpyModifier' => "Modifier used to make notes jump a bit in their own Perspective poss",
+			'XModifier' => "Moves notes and targets X",
+			'XMModifier' => "Moves notes and targets X (Only activates in middlescroll)",
+			'YModifier' => "Moves notes and targets Y",
+			'YDModifier' => "Moves notes and targets Y (Automatically reverses in downscroll)",
+			'ZModifier' => "Moves notes and targets Z (Far, Close)",
+			'PitchModifier' => "Rotates notes around the X axis",
+			'YawModifier' => "Rotates notes around the Y axis",
+			'ConfusionModifier' => "Rotates notes around the Z axis",
+			'DizzyModifier' => "Changes notes angle making a visual on them",
+			'ScaleModifier' => "Modifier used to make notes and targets bigger or smaller",
+			'ScaleXModifier' => "Modifier used to make notes and targets bigger or smaller (Only in X)",
+			'ScaleYModifier' => "Modifier used to make notes and targets bigger or smaller (Only in Y)",
+			'SpeedModifier' => "Modifier used to make notes be faster or slower",
+			'StealthModifier' => "Modifier used to change notes and targets alpha",
+			'NoteStealthModifier' => "Modifier used to change notes alpha",
+			'LaneStealthModifier' => "Modifier used to change targets alpha",
+			'InvertModifier' => "Modifier used to invert notes and targets X poss (down/left/right/up)",
+			'FlipModifier' => "Modifier used to flip notes and targets X poss (right/up/down/left)",
+			'MiniModifier' => "Modifier similar to ScaleModifier but this one does Z perspective",
+			'ShrinkModifier' => "Modifier used to add a boost of the notes (the more value the less scale it will be at the start)",
+			'BeatXModifier' => "Modifier used to move notes and targets X with a small jump effect",
+			'BeatYModifier' => "Modifier used to move notes and targets Y with a small jump effect",
+			'BeatZModifier' => "Modifier used to move notes and targets Z with a small jump effect",
+			'BounceXModifier' => "Modifier similar to beatX but it only affect notes X with a jump effect",
+			'BounceYModifier' => "Modifier similar to beatY but it only affect notes Y with a jump effect",
+			'BounceZModifier' => "Modifier similar to beatZ but it only affect notes Z with a jump effect",
+			'StrumBounceXModifier' => 'Bounces the strumline across the X axis.',
+			'StrumBounceYModifier' => 'Bounces the strumline across the Y axis.',
+			'StrumBounceZModifier' => 'Bounces the strumline across the Z axis.',
+			'EaseCurveModifier' => "This enables the EaseModifiers",
+			'EaseCurveXModifier' => "Modifier similar to IncomingAngleMod (X), it will make notes come faster at X poss",
+			'EaseCurveYModifier' => "Modifier similar to IncomingAngleMod (Y), it will make notes come faster at Y poss",
+			'EaseCurveZModifier' => "Modifier similar to IncomingAngleMod (X+Y), it will make notes come faster at Z perspective",
+			'EaseCurveScaleModifier' => "Modifier similar to All easeCurve, it will make notes scale change, usually next to target",
+			'EaseCurveAngleModifier' => "Modifier similar to All easeCurve, it will make notes angle change, usually next to target",
+			'InvertSineModifier' => "Modifier used to do a curve in the notes it will be different for notes (Down and Right / Left and Up)",
+			'BoostModifier' => "Modifier used to make notes come faster to target",
+			'BrakeModifier' => "Modifier used to make notes come slower to target",
+			'BoomerangModifier' => "Modifier used to make notes come in reverse to target",
+			'WaveingModifier' => "Modifier used to make notes come faster and slower to target",
+			'JumpModifier' => "Modifier used to make notes and target jump",
+			'WaveXModifier' => "Modifier similar to drunkX but this one will simulate a true wave in X (don't affect the notes)",
+			'WaveYModifier' => "Modifier similar to drunkY but this one will simulate a true wave in Y (don't affect the notes)",
+			'WaveZModifier' => "Modifier similar to drunkZ but this one will simulate a true wave in Z (don't affect the notes)",
+			'TimeStopModifier' => "Modifier used to stop the notes at the top/bottom part of your screen to make it hard to read",
+			'StrumAngleModifier' => "Modifier combined between strumRotate, Confusion, IncomingAngleY, making a rotation easily",
+			'JumpTargetModifier' => "Modifier similar to jump but only target aplied",
+			'JumpNotesModifier' => "Modifier similar to jump but only notes aplied",
+			'EaseXModifier' => "Modifier used to make notes go left to right on the screen",
+			'EaseYModifier' => "Modifier used to make notes go up to down on the screen",
+			'EaseZModifier' => "Modifier used to make notes go far to near right on the screen",
+			'HiddenModifier' => "Modifier used to make an alpha boost on notes",
+			'SuddenModifier' => "Modifier used to make an alpha brake on notes",
+			'VanishModifier' => "Modifier fushion between sudden and hidden",
+			'SkewModifier' => "Modifier used to make note effects (skew)",
+			'SkewXModifier' => "Modifier based from SkewModifier but only in X",
+			'SkewYModifier' => "Modifier based from SkewModifier but only in Y",
+			'NotesModifier' => "Modifier based from other modifiers but only affects notes and no targets",
+			'LanesModifier' => "Modifier based from other modifiers but only affects targets and no notes",
+			'StrumsModifier' => "Modifier based from other modifiers but affects targets and notes",
+			'TanDrunkXModifier' => "Modifier similar to drunk but uses tan instead of sin in X",
+			'TanDrunkYModifier' => "Modifier similar to drunk but uses tan instead of sin in Y",
+			'TanDrunkZModifier' => "Modifier similar to drunk but uses tan instead of sin in Z",
+			'TanWaveXModifier' => "Modifier similar to wave but uses tan instead of sin in X",
+			'TanWaveYModifier' => "Modifier similar to wave but uses tan instead of sin in Y",
+			'TanWaveZModifier' => "Modifier similar to wave but uses tan instead of sin in Z",
+			'TwirlModifier' => "Modifier that makes the notes incoming rotating in a circle in X",
+			'RollModifier' => "Modifier that makes the notes incoming rotating in a circle in Y",
+			'BlinkModifier' => "Modifier that makes the notes alpha go to 0 and go back to 1 constantly",
+			'CosecantXModifier' => "Modifier similar to TanDrunk but uses cosecant instead of tan in X",
+			'CosecantYModifier' => "Modifier similar to TanDrunk but uses cosecant instead of tan in Y",
+			'CosecantZModifier' => "Modifier similar to TanDrunk but uses cosecant instead of tan in Z",
+			'TanDrunkAngleModifier' => "Modifier similar to TanDrunk but in angle",
+			'DrunkAngleModifier' => "Modifier similar to Drunk but in angle",
+			'WaveAngleModifier' => "Modifier similar to Wave but in angle",
+			'TanWaveAngleModifier' => "Modifier similar to TanWave but in angle",
+			'ShakyNotesModifier' => "Modifier used to make notes shake in their on possition",
+			'TordnadoModifier' => "Modifier similar to invertSine, but notes will do their own path instead",
+			'ArrowPath' => "This modifier its able to make custom paths for the mods so this should be a very helpful tool",
+			'ColorTransformRed' => "Alters the color transform of a note on the red channel (0-255)",
+			'ColorTransformGreen' => "Alters the color transform of a note on the green channel (0-255)",
+			'ColorTransformBlue' => "Alters the color transform of a note on the blue channel (0-255)",
+			'ColorTransformRainbow' => "Alters the note color transform with a dynamic rainbow cycle. SubMods: speed, spread.",
+			'ColorTransformRainbowModifier' => "Alters the note color transform with a dynamic rainbow cycle. SubMods: speed, spread.",
+			'ColorFillRed' => "Fills the note with solid red color (silhouette effect like setActorColorTrans)",
+			'ColorFillGreen' => "Fills the note with solid green color (silhouette effect like setActorColorTrans)",
+			'ColorFillBlue' => "Fills the note with solid blue color (silhouette effect like setActorColorTrans)",
+			'ColorFillAlpha' => "Controls the blend/alpha intensity of the color fill (0.0 = normal note, 1.0 = solid fill). Can be tweened smoothly.",
+			'ColorFillModifier' => "Fills notes with a custom solid color (subvalues: r, g, b, alpha). Silhouette effect like setActorColorTrans.",
+			'ColorFill' => "Fills notes with a custom solid color (subvalues: r, g, b, alpha). Silhouette effect like setActorColorTrans.",
+			'ColorFillRainbow' => "Fills notes with a dynamic rainbow silhouette. SubMods: speed, spread, alpha.",
+			'ColorFillRainbowModifier' => "Fills notes with a dynamic rainbow silhouette. SubMods: speed, spread, alpha.",
+			'SpiralXModifier' => "Makes notes move in a spiral (X axis).  Best combined with reverse 0.5 and flip 0.5.",
+			'SpiralYModifier' => "Makes notes move in a spiral (Y axis).  Best combined with reverse 0.5 and flip 0.5.",
+			'SpiralZModifier' => "Makes notes move in a spiral (Z axis).  Best combined with reverse 0.5 and flip 0.5.",
+			'RingModifier' => "Makes notes orbit in a 3D ring/hoop shape. SubMods: speed (rotation speed), amplitude (ring radius).",
+			'TrailModifier' => "Creates fading ghost trails behind each note as it scrolls. SubMods: segments (ghost count), spacing (distance between ghosts), speed, alpha (starting opacity).",
+			'CopySpriteModifier' => "Crea copias/trail de la nota arriba del strum al llegar o ser tocada/presionada. SubMods: amount (cantidad, def 1), offsetX, offsetY (def -50), offsetZ, offset, speed, alpha, hitWindow.",
+			'WormModifier' => "Filas completas de strums fantasma que se extienden a la derecha. SubMods: spacing (separación entre filas), count (total de copias), speed (velocidad de scroll).",
+			'SawtoothModifier' => "Makes notes move in a sawtooth.",
+			'DigitalModifier' => "Makes notes move in a digital pattern.",
+			'ZigZagModifier' => "Makes notes move in a zigzag pattern.",
+			'SquareModifier' => "Makes notes move in a square.",
+			'InfiniteFormModifier' => "Makes notes move in an infinity shape. SubMods: speed, amplitude, phase.",
+			];
 		}
-		return "Unknown Modifer";
+		var r = _modifierExplainMap.get(modifiersName);
+		return r != null ? r : "Unknown Modifer";
 	}
 
 	public function findCorrectModData(data:Array<Dynamic>) // the data is stored at different indexes based on the type (maybe should have kept them the same)

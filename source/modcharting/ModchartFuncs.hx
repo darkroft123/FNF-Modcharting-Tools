@@ -140,14 +140,6 @@ class ModchartFuncs
             }
             #end
             #elseif LEATHER
-            /*if(flixel.FlxG.state == states.PlayState.instance){
-                HScript.instance.interp.variables.set('PlayfieldRenderer', PlayfieldRenderer);
-                HScript.instance.interp.variables.set('ModchartUtil', ModchartUtil);
-                HScript.instance.interp.variables.set('Modifier', Modifier);
-                HScript.instance.interp.variables.set('NoteMovement', NoteMovement);
-                HScript.instance.interp.variables.set('NotePositionData', NotePositionData);
-                HScript.instance.interp.variables.set('ModchartFile', ModchartFile);
-            }*/
             #end
         }
     #if (HSCRIPT_ALLOWED && PSYCH && PSYCHVERSION >= "0.7")

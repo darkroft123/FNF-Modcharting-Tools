@@ -235,7 +235,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				var daNote = notes.members[i];
 				var songSpeed = daNote.speed;
 
-				var lane = getLane(i);
+				var lane = (daNote.mustPress ? daNote.noteData + NoteMovement.keyCount : daNote.noteData);
 
 				var noteDist = getNoteDist(i);
 				noteDist = modifierTable.applyNoteDistMods(noteDist, lane, pf);
@@ -334,7 +334,6 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			return PlayState.SONG.speed; // just use this while in editor so the instance shit works
 		else
 			return ModchartUtil.getScrollSpeed(playStateInstance);
-		return 1.0;
 	}
 
 	public function createTween(Object:Dynamic, Values:Dynamic, Duration:Float, ?Options:TweenOptions):FlxTween {

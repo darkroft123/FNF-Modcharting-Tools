@@ -24,8 +24,6 @@ class ModchartUtil {
 		if (instance is ModchartEditorState) {
 			return cast(FlxG.state, ModchartEditorState)?.check_downscroll?.checked ?? utilities.Options.getData("downscroll");
 		}
-		// need to test each engine
-		// not expecting all to work
 		#if PSYCH
 		#if (PSYCHVERSION >= "0.7")
 		return ClientPrefs.downScroll;
@@ -247,85 +245,53 @@ class ModchartUtil {
 		return pos;
 	}
 
-	public static function getFlxEaseByString(?ease:String = '') {
-		if (ease == null) ease = '';
-		var cleanEase = ease.split(',')[0].toLowerCase().trim();
-		switch (cleanEase) {
-			case 'backin':
-				return FlxEase.backIn;
-			case 'backinout':
-				return FlxEase.backInOut;
-			case 'backout':
-				return FlxEase.backOut;
-			case 'bouncein':
-				return FlxEase.bounceIn;
-			case 'bounceinout':
-				return FlxEase.bounceInOut;
-			case 'bounceout':
-				return FlxEase.bounceOut;
-			case 'circin':
-				return FlxEase.circIn;
-			case 'circinout':
-				return FlxEase.circInOut;
-			case 'circout':
-				return FlxEase.circOut;
-			case 'cubein':
-				return FlxEase.cubeIn;
-			case 'cubeinout':
-				return FlxEase.cubeInOut;
-			case 'cubeout':
-				return FlxEase.cubeOut;
-			case 'elasticin':
-				return FlxEase.elasticIn;
-			case 'elasticinout':
-				return FlxEase.elasticInOut;
-			case 'elasticout':
-				return FlxEase.elasticOut;
-			case 'expoin':
-				return FlxEase.expoIn;
-			case 'expoinout':
-				return FlxEase.expoInOut;
-			case 'expoout':
-				return FlxEase.expoOut;
-			case 'quadin':
-				return FlxEase.quadIn;
-			case 'quadinout':
-				return FlxEase.quadInOut;
-			case 'quadout':
-				return FlxEase.quadOut;
-			case 'quartin':
-				return FlxEase.quartIn;
-			case 'quartinout':
-				return FlxEase.quartInOut;
-			case 'quartout':
-				return FlxEase.quartOut;
-			case 'quintin':
-				return FlxEase.quintIn;
-			case 'quintinout':
-				return FlxEase.quintInOut;
-			case 'quintout':
-				return FlxEase.quintOut;
-			case 'sinein':
-				return FlxEase.sineIn;
-			case 'sineinout':
-				return FlxEase.sineInOut;
-			case 'sineout':
-				return FlxEase.sineOut;
-			case 'smoothstepin':
-				return FlxEase.smoothStepIn;
-			case 'smoothstepinout':
-				return FlxEase.smoothStepInOut;
-			case 'smoothstepout':
-				return FlxEase.smoothStepInOut;
-			case 'smootherstepin':
-				return FlxEase.smootherStepIn;
-			case 'smootherstepinout':
-				return FlxEase.smootherStepInOut;
-			case 'smootherstepout':
-				return FlxEase.smootherStepOut;
-		}
-		return FlxEase.linear;
+	static var _easeMap:Map<String, Float->Float> = null;
+public static function getFlxEaseByString(?ease:String = '') {
+if (ease == null) ease = '';
+var cleanEase = ease.split(',')[0].toLowerCase().trim();
+if (_easeMap == null) {
+		_easeMap = [
+			'backin' => FlxEase.backIn,
+			'backinout' => FlxEase.backInOut,
+			'backout' => FlxEase.backOut,
+			'bouncein' => FlxEase.bounceIn,
+			'bounceinout' => FlxEase.bounceInOut,
+			'bounceout' => FlxEase.bounceOut,
+			'circin' => FlxEase.circIn,
+			'circinout' => FlxEase.circInOut,
+			'circout' => FlxEase.circOut,
+			'cubein' => FlxEase.cubeIn,
+			'cubeinout' => FlxEase.cubeInOut,
+			'cubeout' => FlxEase.cubeOut,
+			'elasticin' => FlxEase.elasticIn,
+			'elasticinout' => FlxEase.elasticInOut,
+			'elasticout' => FlxEase.elasticOut,
+			'expoin' => FlxEase.expoIn,
+			'expoinout' => FlxEase.expoInOut,
+			'expoout' => FlxEase.expoOut,
+			'quadin' => FlxEase.quadIn,
+			'quadinout' => FlxEase.quadInOut,
+			'quadout' => FlxEase.quadOut,
+			'quartin' => FlxEase.quartIn,
+			'quartinout' => FlxEase.quartInOut,
+			'quartout' => FlxEase.quartOut,
+			'quintin' => FlxEase.quintIn,
+			'quintinout' => FlxEase.quintInOut,
+			'quintout' => FlxEase.quintOut,
+			'sinein' => FlxEase.sineIn,
+			'sineinout' => FlxEase.sineInOut,
+			'sineout' => FlxEase.sineOut,
+			'smoothstepin' => FlxEase.smoothStepIn,
+			'smoothstepinout' => FlxEase.smoothStepInOut,
+			'smoothstepout' => FlxEase.smoothStepInOut,
+			'smootherstepin' => FlxEase.smootherStepIn,
+			'smootherstepinout' => FlxEase.smootherStepInOut,
+			'smootherstepout' => FlxEase.smootherStepOut,
+		];
 	}
+	var result = _easeMap.get(cleanEase);
+	return result != null ? result : FlxEase.linear;
+}
 
 	public static function getTimeFromBeat(beat:Float) {
 		var curBpm = PlayState.SONG != null ? PlayState.SONG.bpm : Conductor.bpm;

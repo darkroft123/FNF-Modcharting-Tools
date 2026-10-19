@@ -128,22 +128,7 @@ class NotePositionData implements IFlxDestroyable {
 
 		this.strumTime = 0;
 
-		this.redOffset = 0;
-		this.greenOffset = 0;
-		this.blueOffset = 0;
-		this.redMultiplier = 1.0;
-		this.greenMultiplier = 1.0;
-		this.blueMultiplier = 1.0;
-		this.colorFillR = 0.0;
-		this.colorFillG = 0.0;
-		this.colorFillB = 0.0;
-		this.colorFillAlpha = 1.0;
-		this.colorFillAlphaExplicit = false;
-		this.hasColorFill = false;
-		this.camera = null;
-		this.cameraScrollX = 0.0;
-		this.cameraScrollY = 0.0;
-		this.cameraZoom = 1.0;
+		resetColorAndCamera();
 	}
 
 	public function setupNote(
@@ -195,6 +180,10 @@ class NotePositionData implements IFlxDestroyable {
 
 		this.strumTime = strumTime;
 
+		resetColorAndCamera();
+	}
+
+	public function resetColorAndCamera():Void {
 		this.redOffset = 0;
 		this.greenOffset = 0;
 		this.blueOffset = 0;
