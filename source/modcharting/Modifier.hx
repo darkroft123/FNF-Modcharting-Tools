@@ -2648,7 +2648,6 @@ class StrumTrail {
 	public var skX:Float;
 	public var skY:Float;
 	public var amount:Int;
-	public var offsetMult:Float;
 	public var applyMods:Bool;
 	public var forceStatic:Bool;
 
@@ -2660,15 +2659,11 @@ class CopyStrumModifier extends Modifier {
 	public var hasCalledEvent:Bool = false;
 
 	override function setupSubValues() {
+		subValues.set('x', new ModifierSubValue(0.0));
+		subValues.set('y', new ModifierSubValue(0.0));
+		subValues.set('z', new ModifierSubValue(0.0));
 		subValues.set('alpha', new ModifierSubValue(1.0));
-		subValues.set('xoffset', new ModifierSubValue(0.0));
-		subValues.set('yoffset', new ModifierSubValue(0.0));
-		subValues.set('zoffset', new ModifierSubValue(0.0));
-		subValues.set('offsetX', new ModifierSubValue(0.0));
-		subValues.set('offsetY', new ModifierSubValue(0.0));
-		subValues.set('offsetZ', new ModifierSubValue(0.0));
 		subValues.set('amount', new ModifierSubValue(1.0));
-		subValues.set('offset', new ModifierSubValue(1.0));
 		subValues.set('scale', new ModifierSubValue(1.0));
 		subValues.set('scaleX', new ModifierSubValue(1.0));
 		subValues.set('scaleY', new ModifierSubValue(1.0));
@@ -2694,16 +2689,7 @@ class CopyStrumModifier extends Modifier {
 		hasCalledEvent = false;
 	}
 
-	override function onEvent(val:Float, time:Float, ease:String, beat:Float):Void {
-		hasCalledEvent = true;
-
-		if (activeTrails.length > 0 && Math.abs(activeTrails[activeTrails.length - 1].startBeat - beat) < 0.001) {
-			var existing = activeTrails[activeTrails.length - 1];
-			var alphaSub = getSubVal('alpha', 1.0);
-			if (val > 0.0001) existing.startAlpha = val * alphaSub;
-			return;
-		}
-
+	function createTrail(alphaVal:Float, time:Float, ease:String, beat:Float):StrumTrail {
 		var trail = new StrumTrail();
 		trail.startBeat = beat;
 
@@ -2713,12 +2699,11 @@ class CopyStrumModifier extends Modifier {
 		trail.easeName = (ease != null && ease != "") ? ease : "linear";
 
 		var alphaSub = getSubVal('alpha', 1.0);
-		trail.startAlpha = (val <= 0.0001) ? alphaSub : (val * alphaSub);
+		trail.startAlpha = (alphaVal <= 0.0001) ? alphaSub : (alphaVal * alphaSub);
 
-		trail.offX = getSubVal('xoffset', 0.0) + getSubVal('offsetX', 0.0);
-		trail.offY = getSubVal('yoffset', 0.0) + getSubVal('offsetY', 0.0);
-		trail.offZ = getSubVal('zoffset', 0.0) + getSubVal('offsetZ', 0.0);
-		trail.offsetMult = getSubVal('offset', 1.0);
+		trail.offX = 0.0;
+		trail.offY = 0.0;
+		trail.offZ = 0.0;
 
 		var sc = getSubVal('scale', 1.0);
 		trail.scX = getSubVal('scaleX', 1.0) * sc;
@@ -2738,20 +2723,63 @@ class CopyStrumModifier extends Modifier {
 		trail.forceStatic = getSubVal('forceStatic', 1.0) > 0.5;
 		trail.applyMods = getSubVal('applyMods', 1.0) > 0.5;
 
+		return trail;
+	}
+
+	override function onEvent(val:Float, time:Float, ease:String, beat:Float):Void {
+		hasCalledEvent = true;
+
+		if (activeTrails.length > 0 && Math.abs(activeTrails[activeTrails.length - 1].startBeat - beat) < 0.001) {
+			var existing = activeTrails[activeTrails.length - 1];
+			var alphaSub = getSubVal('alpha', 1.0);
+			if (val > 0.0001) existing.startAlpha = val * alphaSub;
+			return;
+		}
+
+		var trail = createTrail(val, time, ease, beat);
 		activeTrails.push(trail);
 	}
 
 	override function onSubModEvent(subMod:String, val:Float, time:Float, ease:String, beat:Float):Void {
 		hasCalledEvent = true;
+
+		var trail:StrumTrail = null;
 		if (activeTrails.length > 0 && Math.abs(activeTrails[activeTrails.length - 1].startBeat - beat) < 0.001) {
-			var t = activeTrails[activeTrails.length - 1];
-			if (subMod == 'xoffset' || subMod == 'offsetX') t.offX = val;
-			else if (subMod == 'yoffset' || subMod == 'offsetY') t.offY = val;
-			else if (subMod == 'zoffset' || subMod == 'offsetZ') t.offZ = val;
-			else if (subMod == 'alpha') t.startAlpha = val;
-			return;
+			trail = activeTrails[activeTrails.length - 1];
+		} else {
+			trail = createTrail(1.0, time, ease, beat);
+			activeTrails.push(trail);
 		}
-		onEvent(1.0, time, ease, beat);
+
+		switch (subMod) {
+			case 'x', 'xoffset', 'offsetX':
+				trail.offX = val;
+			case 'y', 'yoffset', 'offsetY':
+				trail.offY = val;
+			case 'z', 'zoffset', 'offsetZ':
+				trail.offZ = val;
+			case 'alpha':
+				trail.startAlpha = val;
+			case 'scale':
+				trail.scX = val;
+				trail.scY = val;
+			case 'scaleX':
+				trail.scX = val;
+			case 'scaleY':
+				trail.scY = val;
+			case 'angle':
+				trail.angZ = val;
+			case 'angleX':
+				trail.angX = val;
+			case 'angleY':
+				trail.angY = val;
+			case 'angleZ':
+				trail.angZ = val;
+			case 'skewX':
+				trail.skX = val;
+			case 'skewY':
+				trail.skY = val;
+		}
 	}
 
 	override function hasExtraStrumData():Bool {
@@ -2771,10 +2799,9 @@ class CopyStrumModifier extends Modifier {
 			var amountVal = getSubVal('amount', 1.0);
 			var copyCount = Std.int(Math.max(amountVal, 1));
 
-			var offX = getSubVal('xoffset', 0.0) + getSubVal('offsetX', 0.0);
-			var offY = getSubVal('yoffset', 0.0) + getSubVal('offsetY', 0.0);
-			var offZ = getSubVal('zoffset', 0.0) + getSubVal('offsetZ', 0.0);
-			var offsetMult = getSubVal('offset', 1.0);
+			var offX = getSubVal('x', 0.0);
+			var offY = getSubVal('y', 0.0);
+			var offZ = getSubVal('z', 0.0);
 
 			var sc = getSubVal('scale', 1.0);
 			var scX = getSubVal('scaleX', 1.0) * sc;
@@ -2811,9 +2838,9 @@ class CopyStrumModifier extends Modifier {
 					if (applyModsVal)
 						renderer.modifierTable.applyStrumMods(copyData, lane, pf);
 
-					copyData.x += offX * step * offsetMult;
-					copyData.y += offY * step * offsetMult;
-					copyData.z += offZ * step * offsetMult;
+					copyData.x += offX * step;
+					copyData.y += offY * step;
+					copyData.z += offZ * step;
 
 					copyData.scaleX = defScale * scX;
 					copyData.scaleY = defScale * scY;
@@ -2886,9 +2913,9 @@ class CopyStrumModifier extends Modifier {
 					if (trail.applyMods)
 						renderer.modifierTable.applyStrumMods(copyData, lane, pf);
 
-					var curOffX = trail.offX * step * trail.offsetMult * eased;
-					var curOffY = trail.offY * step * trail.offsetMult * eased;
-					var curOffZ = trail.offZ * step * trail.offsetMult * eased;
+					var curOffX = trail.offX * step * eased;
+					var curOffY = trail.offY * step * eased;
+					var curOffZ = trail.offZ * step * eased;
 
 					copyData.x += curOffX;
 					copyData.y += curOffY;
