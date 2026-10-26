@@ -2634,6 +2634,9 @@ class CopyStrumModifier extends Modifier {
 		subValues.set('xoffset', new ModifierSubValue(0.0));
 		subValues.set('yoffset', new ModifierSubValue(0.0));
 		subValues.set('zoffset', new ModifierSubValue(0.0));
+		subValues.set('offsetX', new ModifierSubValue(0.0));
+		subValues.set('offsetY', new ModifierSubValue(0.0));
+		subValues.set('offsetZ', new ModifierSubValue(0.0));
 		subValues.set('amount', new ModifierSubValue(1.0));
 		subValues.set('offset', new ModifierSubValue(1.0));
 		subValues.set('scale', new ModifierSubValue(1.0));
@@ -2645,79 +2648,52 @@ class CopyStrumModifier extends Modifier {
 		subValues.set('angleZ', new ModifierSubValue(0.0));
 		subValues.set('skewX', new ModifierSubValue(0.0));
 		subValues.set('skewY', new ModifierSubValue(0.0));
-		subValues.set('fade', new ModifierSubValue(1.0));
 		subValues.set('forceStatic', new ModifierSubValue(1.0));
 		subValues.set('applyMods', new ModifierSubValue(1.0));
 	}
 
-	function getSubVal(key1:String, ?key2:String, defaultVal:Float = 0.0):Float {
-		if (key2 != null && subValues.exists(key2)) {
-			var sub2 = subValues.get(key2);
-			if (sub2.value != sub2.baseValue) return sub2.value;
-		}
-		if (subValues.exists(key1)) {
-			var sub1 = subValues.get(key1);
-			if (sub1.value != sub1.baseValue) return sub1.value;
-			return sub1.value;
-		}
-		if (key2 != null && subValues.exists(key2)) return subValues.get(key2).value;
+	function getSubVal(key:String, defaultVal:Float = 0.0):Float {
+		if (subValues.exists(key))
+			return subValues.get(key).value;
 		return defaultVal;
 	}
 
+	override function hasExtraStrumData():Bool {
+		return Math.abs(currentValue) > 0.001;
+	}
+
 	override function gatherExtraStrumData(pf:Int):Array<NotePositionData> {
-		if (currentValue == baseValue || renderer == null) return null;
+		if (renderer == null) return null;
 
-		var progress = Math.max(0.0, Math.min(1.0, Math.abs(currentValue)));
-
-		if (progress >= 1.0) {
-			currentValue = baseValue;
-			return null;
-		}
-
-		if (progress <= 0.0001) return null;
-
-		var alphaVal = getSubVal('alpha', 'opacity', 1.0);
-		var fadeVal = Std.int(getSubVal('fade', 1.0));
-
-		var alphaMult:Float = 1.0;
-		switch (fadeVal) {
-			case 0:
-				alphaMult = 1.0 - progress;
-			case 2:
-				alphaMult = (progress < 0.2) ? (progress / 0.2) : ((1.0 - progress) / 0.8);
-			default:
-				alphaMult = Math.sin(progress * Math.PI);
-		}
-
-		var finalAlpha = Math.max(0.0, Math.min(1.0, alphaVal * alphaMult));
+		var alphaSub = getSubVal('alpha', 1.0);
+		var finalAlpha = Math.max(0.0, Math.min(1.0, currentValue * alphaSub));
 		if (finalAlpha <= 0.001) return null;
 
-		var extra:Array<NotePositionData> = [];
-		var amountVal = getSubVal('amount', 'count', 1.0);
+		var amountVal = getSubVal('amount', 1.0);
 		var copyCount = Std.int(Math.max(amountVal, 1));
 
-		var offX = getSubVal('xoffset', 'offsetX', 0.0);
-		var offY = getSubVal('yoffset', 'offsetY', 0.0);
-		var offZ = getSubVal('zoffset', 'offsetZ', 0.0);
-		var offsetMult = getSubVal('offset', 'spacing', 1.0);
+		var offX = getSubVal('xoffset', 0.0) + getSubVal('offsetX', 0.0);
+		var offY = getSubVal('yoffset', 0.0) + getSubVal('offsetY', 0.0);
+		var offZ = getSubVal('zoffset', 0.0) + getSubVal('offsetZ', 0.0);
+		var offsetMult = getSubVal('offset', 1.0);
 
 		var sc = getSubVal('scale', 1.0);
 		var scX = getSubVal('scaleX', 1.0) * sc;
 		var scY = getSubVal('scaleY', 1.0) * sc;
 
-		var ang = getSubVal('angle', 'angleZ', 0.0);
+		var ang = getSubVal('angle', 0.0);
 		var angX = getSubVal('angleX', 0.0);
 		var angY = getSubVal('angleY', 0.0);
-		var angZ = getSubVal('angleZ', 'angle', 0.0);
-		if (ang != 0 && angZ == 0) angZ = ang;
+		var angZ = getSubVal('angleZ', 0.0) + ang;
 
 		var skX = getSubVal('skewX', 0.0);
 		var skY = getSubVal('skewY', 0.0);
 
-		var forceStaticVal = getSubVal('forceStatic', 'static', 1.0) > 0.5;
-		var applyModsVal = getSubVal('applyMods', 'inheritMods', 1.0) > 0.5;
+		var forceStaticVal = getSubVal('forceStatic', 1.0) > 0.5;
+		var applyModsVal = getSubVal('applyMods', 1.0) > 0.5;
 
 		var strumCount = renderer.strumGroup.members.length;
+		var extra:Array<NotePositionData> = [];
 
 		for (lane in 0...strumCount) {
 			if (!checkLane(lane) || !checkPlayField(pf)) continue;
@@ -2739,23 +2715,23 @@ class CopyStrumModifier extends Modifier {
 				if (applyModsVal)
 					renderer.modifierTable.applyStrumMods(copyData, lane, pf);
 
-				var totalOffX = offX * step * offsetMult * progress;
-				var totalOffY = offY * step * offsetMult * progress;
-				var totalOffZ = offZ * step * offsetMult * progress;
+				var totalOffX = offX * step * offsetMult;
+				var totalOffY = offY * step * offsetMult;
+				var totalOffZ = offZ * step * offsetMult;
 
 				copyData.x += totalOffX;
 				copyData.y += totalOffY;
 				copyData.z += totalOffZ;
 
-				copyData.scaleX = defScale * (1.0 + (scX - 1.0) * progress);
-				copyData.scaleY = defScale * (1.0 + (scY - 1.0) * progress);
+				copyData.scaleX = defScale * scX;
+				copyData.scaleY = defScale * scY;
 
-				copyData.angleX = angX * progress;
-				copyData.angleY = angY * progress;
-				copyData.angleZ = angZ * progress;
+				copyData.angleX += angX;
+				copyData.angleY += angY;
+				copyData.angleZ += angZ;
 
-				copyData.skewX = defSkewX + (skX * progress);
-				copyData.skewY = defSkewY + (skY * progress);
+				copyData.skewX += skX;
+				copyData.skewY += skY;
 
 				var copyFade = (copyCount > 1) ? (1.0 - (c / copyCount) * 0.4) : 1.0;
 				copyData.alpha = Math.max(0.0, Math.min(1.0, finalAlpha * copyFade));
