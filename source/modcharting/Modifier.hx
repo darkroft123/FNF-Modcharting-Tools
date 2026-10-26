@@ -2525,7 +2525,7 @@ class TrailModifier extends Modifier {
 	}
 }
 
-class NoteTrail {
+private class NoteTrail {
 	public var startBeat:Float;
 	public var durationBeats:Float;
 	public var easeName:String;
@@ -2894,7 +2894,7 @@ class CopySpriteModifier extends Modifier {
 	}
 }
 
-class StrumTrail {
+private class StrumTrail {
 	public var startBeat:Float;
 	public var durationBeats:Float;
 	public var easeName:String;
