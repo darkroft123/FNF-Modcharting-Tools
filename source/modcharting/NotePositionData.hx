@@ -54,6 +54,7 @@ class NotePositionData implements IFlxDestroyable {
 	public var cameraScrollX:Float = 0.0;
 	public var cameraScrollY:Float = 0.0;
 	public var cameraZoom:Float = 1.0;
+	public var customSprite:flixel.FlxSprite = null;
 
 	public function finalizeColorFill():Void {
 		if (!hasColorFill || colorFillAlpha <= 0) return;
@@ -76,7 +77,9 @@ class NotePositionData implements IFlxDestroyable {
 
 	public function new() {}
 
-	public function destroy() {}
+	public function destroy() {
+		customSprite = null;
+	}
 
 	public inline static function get():NotePositionData {
 		return pool.get();
@@ -84,6 +87,7 @@ class NotePositionData implements IFlxDestroyable {
 
 
 		public static function recycle(data:NotePositionData):Void {
+		data.customSprite = null;
 		pool.put(data);
 	}
 
@@ -203,5 +207,6 @@ class NotePositionData implements IFlxDestroyable {
 		this.cameraScrollX = 0.0;
 		this.cameraScrollY = 0.0;
 		this.cameraZoom = 1.0;
+		this.customSprite = null;
 	}
 }

@@ -20,6 +20,9 @@ class FlxSprite3D extends FlxSkewedSprite {
 	 * The 3D angle of the sprite.
 	 */
 	public var angle3D(default, null):FlxPoint3D;
+	public var z:Float = 0;
+	public var offsetX:Float = 0;
+	public var isSustainNote:Bool = false;
 
 	private var _rotationMatrix(default, null):FlxMatrix;
 

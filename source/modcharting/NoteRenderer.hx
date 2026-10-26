@@ -38,17 +38,23 @@ class NoteRenderer {
 		);
 	}
 
-	public static function addDataToNote(noteData:NotePositionData, daNote:Note):Void {
+	public static function addDataToNote(noteData:NotePositionData, daNote:Dynamic):Void {
 		daNote.x = noteData.x;
 		daNote.y = noteData.y;
 		daNote.z = noteData.z;
-		daNote.angle3D.x = noteData.angleX;
+		if (daNote.angle3D != null) {
+			daNote.angle3D.x = noteData.angleX;
 		daNote.angle3D.y = noteData.angleY;
 		daNote.angle3D.z = noteData.angleZ;
+		} else {
+			daNote.angle = noteData.angleZ;
+		}
 		daNote.scale.x = noteData.scaleX;
 		daNote.scale.y = noteData.scaleY;
-		daNote.skew.x = noteData.skewX;
+		if (daNote.skew != null) {
+			daNote.skew.x = noteData.skewX;
 		daNote.skew.y = noteData.skewY;
+		}
 		daNote.setColorTransform(
 			noteData.redMultiplier,
 			noteData.greenMultiplier,
@@ -132,7 +138,9 @@ class NoteRenderer {
 			return;
 
 		var changeX:Bool = noteData.z != 0;
-		var daNote = renderer.notes.members[noteData.index];
+		var daNote:Dynamic = (noteData.customSprite != null) ? noteData.customSprite : (noteData.index >= 0 && noteData.index < renderer.notes.members.length ? renderer.notes.members[noteData.index] : null);
+		if (daNote == null)
+			return;
 		var thisNotePos:Vector3D;
 
 		if (changeX) {
@@ -152,8 +160,8 @@ class NoteRenderer {
 			thisNotePos = _vec3;
 		}
 
-		if (daNote.isSustainNote) {
-			if (!daNote.animation.curAnim.name.endsWith("end")) {
+		if (daNote.isSustainNote == true) {
+			if (daNote.animation != null && daNote.animation.curAnim != null && !daNote.animation.curAnim.name.endsWith("end")) {
 				noteData.scaleY *= SustainRenderer.sustainScaleMultiplier(daNote, noteData.lane);
 			}
 		}
