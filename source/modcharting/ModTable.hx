@@ -199,6 +199,7 @@ class ModTable
         var modifiers:Map<String, Modifier> = renderer.modifierTable.modifiers;
         if (modifiers.exists(modifier))
         {       
+            modifiers.get(modifier).onEvent(val, time, ease, beat);
             var easefunc = ModchartUtil.getFlxEaseByString(ease);  
             if (Conductor.songPosition >= ModchartUtil.getTimeFromBeat(beat)+(time*1000)) //cancel if should have ended
             {

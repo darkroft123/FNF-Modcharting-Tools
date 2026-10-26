@@ -409,7 +409,9 @@ class ModchartFuncs
                     name = 'cameramodifier';
                 if (instance.playfieldRenderer.modifierTable.modifiers.exists(name))
                 {
-                    instance.playfieldRenderer.modifierTable.modifiers.get(name).currentValue = (Math.isNaN(value) ? 0 : value);
+                    var mod = instance.playfieldRenderer.modifierTable.modifiers.get(name);
+                    mod.currentValue = (Math.isNaN(value) ? 0 : value);
+                    mod.onEvent(mod.currentValue, 0, "linear", beat);
                 }
                 else 
                 {

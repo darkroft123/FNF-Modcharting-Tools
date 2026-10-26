@@ -100,21 +100,17 @@ class NoteRenderer {
 		var oldOffsetY = strumNote.offset.y;
 		var oldOriginX = strumNote.origin.x;
 		var oldOriginY = strumNote.origin.y;
+		var oldFrame = strumNote.frame;
 
-		var oldAnim:String = null;
-		var oldFrame:Int = 0;
-		if (noteData.forceStatic && strumNote.animation != null && strumNote.animation.curAnim != null) {
-			if (strumNote.animation.curAnim.name != "static" && strumNote.animation.getByName("static") != null) {
-				oldAnim = strumNote.animation.curAnim.name;
-				oldFrame = strumNote.animation.curAnim.curFrame;
-				#if (PSYCH || LEATHER)
-				if (Reflect.hasField(strumNote, "playAnim"))
-					Reflect.callMethod(strumNote, Reflect.field(strumNote, "playAnim"), ["static", true]);
-				else
-					strumNote.animation.play("static", true);
-				#else
-				strumNote.animation.play("static", true);
-				#end
+		if (noteData.forceStatic && strumNote.animation != null) {
+			var staticAnim = strumNote.animation.getByName('static');
+			if (staticAnim != null && staticAnim.frames != null && staticAnim.frames.length > 0 && strumNote.frames != null) {
+				var frameIdx = staticAnim.frames[0];
+				if (frameIdx >= 0 && frameIdx < strumNote.frames.frames.length) {
+					strumNote.frame = strumNote.frames.frames[frameIdx];
+					strumNote.centerOffsets();
+					strumNote.centerOrigin();
+				}
 			}
 		}
 
@@ -122,17 +118,7 @@ class NoteRenderer {
 
 		strumNote.draw();
 
-		if (oldAnim != null && strumNote.animation != null) {
-			#if (PSYCH || LEATHER)
-			if (Reflect.hasField(strumNote, "playAnim"))
-				Reflect.callMethod(strumNote, Reflect.field(strumNote, "playAnim"), [oldAnim, true]);
-			else
-				strumNote.animation.play(oldAnim, true, false, oldFrame);
-			#else
-			strumNote.animation.play(oldAnim, true, false, oldFrame);
-			#end
-		}
-
+		strumNote.frame = oldFrame;
 		strumNote.x = oldX;
 		strumNote.y = oldY;
 		strumNote.scale.x = oldScaleX;

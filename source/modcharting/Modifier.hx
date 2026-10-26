@@ -157,6 +157,10 @@ class Modifier {
 
 	public dynamic function hasExtraNoteData():Bool { return false; }
 
+	public dynamic function onEvent(val:Float, time:Float, ease:String, beat:Float):Void {}
+
+	public dynamic function onSubModEvent(subMod:String, val:Float, time:Float, ease:String, beat:Float):Void {}
+
 	public inline function checkPlayField(pf:Int):Bool // returns true if should display on current playfield
 	{
 		return (playfield == -1) || (pf == playfield);
@@ -2628,7 +2632,33 @@ class CopySpriteModifier extends Modifier {
 	}
 }
 
+class StrumTrail {
+	public var startBeat:Float;
+	public var durationBeats:Float;
+	public var easeName:String;
+	public var startAlpha:Float;
+	public var offX:Float;
+	public var offY:Float;
+	public var offZ:Float;
+	public var scX:Float;
+	public var scY:Float;
+	public var angX:Float;
+	public var angY:Float;
+	public var angZ:Float;
+	public var skX:Float;
+	public var skY:Float;
+	public var amount:Int;
+	public var offsetMult:Float;
+	public var applyMods:Bool;
+	public var forceStatic:Bool;
+
+	public function new() {}
+}
+
 class CopyStrumModifier extends Modifier {
+	public var activeTrails:Array<StrumTrail> = [];
+	public var hasCalledEvent:Bool = false;
+
 	override function setupSubValues() {
 		subValues.set('alpha', new ModifierSubValue(1.0));
 		subValues.set('xoffset', new ModifierSubValue(0.0));
@@ -2658,89 +2688,231 @@ class CopyStrumModifier extends Modifier {
 		return defaultVal;
 	}
 
+	override function reset() {
+		super.reset();
+		activeTrails = [];
+		hasCalledEvent = false;
+	}
+
+	override function onEvent(val:Float, time:Float, ease:String, beat:Float):Void {
+		hasCalledEvent = true;
+
+		if (activeTrails.length > 0 && Math.abs(activeTrails[activeTrails.length - 1].startBeat - beat) < 0.001) {
+			var existing = activeTrails[activeTrails.length - 1];
+			var alphaSub = getSubVal('alpha', 1.0);
+			if (val > 0.0001) existing.startAlpha = val * alphaSub;
+			return;
+		}
+
+		var trail = new StrumTrail();
+		trail.startBeat = beat;
+
+		var crochetSec = (Conductor.crochet > 0) ? (Conductor.crochet * 0.001) : 0.5;
+		var durBeats = (time > 0) ? (time / crochetSec) : 1.0;
+		trail.durationBeats = Math.max(0.01, durBeats);
+		trail.easeName = (ease != null && ease != "") ? ease : "linear";
+
+		var alphaSub = getSubVal('alpha', 1.0);
+		trail.startAlpha = (val <= 0.0001) ? alphaSub : (val * alphaSub);
+
+		trail.offX = getSubVal('xoffset', 0.0) + getSubVal('offsetX', 0.0);
+		trail.offY = getSubVal('yoffset', 0.0) + getSubVal('offsetY', 0.0);
+		trail.offZ = getSubVal('zoffset', 0.0) + getSubVal('offsetZ', 0.0);
+		trail.offsetMult = getSubVal('offset', 1.0);
+
+		var sc = getSubVal('scale', 1.0);
+		trail.scX = getSubVal('scaleX', 1.0) * sc;
+		trail.scY = getSubVal('scaleY', 1.0) * sc;
+
+		var ang = getSubVal('angle', 0.0);
+		trail.angX = getSubVal('angleX', 0.0);
+		trail.angY = getSubVal('angleY', 0.0);
+		trail.angZ = getSubVal('angleZ', 0.0) + ang;
+
+		trail.skX = getSubVal('skewX', 0.0);
+		trail.skY = getSubVal('skewY', 0.0);
+
+		var amountVal = getSubVal('amount', 1.0);
+		trail.amount = Std.int(Math.max(amountVal, 1));
+
+		trail.forceStatic = getSubVal('forceStatic', 1.0) > 0.5;
+		trail.applyMods = getSubVal('applyMods', 1.0) > 0.5;
+
+		activeTrails.push(trail);
+	}
+
+	override function onSubModEvent(subMod:String, val:Float, time:Float, ease:String, beat:Float):Void {
+		hasCalledEvent = true;
+		if (activeTrails.length > 0 && Math.abs(activeTrails[activeTrails.length - 1].startBeat - beat) < 0.001) {
+			var t = activeTrails[activeTrails.length - 1];
+			if (subMod == 'xoffset' || subMod == 'offsetX') t.offX = val;
+			else if (subMod == 'yoffset' || subMod == 'offsetY') t.offY = val;
+			else if (subMod == 'zoffset' || subMod == 'offsetZ') t.offZ = val;
+			else if (subMod == 'alpha') t.startAlpha = val;
+			return;
+		}
+		onEvent(1.0, time, ease, beat);
+	}
+
 	override function hasExtraStrumData():Bool {
-		return Math.abs(currentValue) > 0.001;
+		return !hasCalledEvent || activeTrails.length > 0;
 	}
 
 	override function gatherExtraStrumData(pf:Int):Array<NotePositionData> {
 		if (renderer == null) return null;
 
-		var alphaSub = getSubVal('alpha', 1.0);
-		var finalAlpha = Math.max(0.0, Math.min(1.0, currentValue * alphaSub));
-		if (finalAlpha <= 0.001) return null;
-
-		var amountVal = getSubVal('amount', 1.0);
-		var copyCount = Std.int(Math.max(amountVal, 1));
-
-		var offX = getSubVal('xoffset', 0.0) + getSubVal('offsetX', 0.0);
-		var offY = getSubVal('yoffset', 0.0) + getSubVal('offsetY', 0.0);
-		var offZ = getSubVal('zoffset', 0.0) + getSubVal('offsetZ', 0.0);
-		var offsetMult = getSubVal('offset', 1.0);
-
-		var sc = getSubVal('scale', 1.0);
-		var scX = getSubVal('scaleX', 1.0) * sc;
-		var scY = getSubVal('scaleY', 1.0) * sc;
-
-		var ang = getSubVal('angle', 0.0);
-		var angX = getSubVal('angleX', 0.0);
-		var angY = getSubVal('angleY', 0.0);
-		var angZ = getSubVal('angleZ', 0.0) + ang;
-
-		var skX = getSubVal('skewX', 0.0);
-		var skY = getSubVal('skewY', 0.0);
-
-		var forceStaticVal = getSubVal('forceStatic', 1.0) > 0.5;
-		var applyModsVal = getSubVal('applyMods', 1.0) > 0.5;
-
 		var strumCount = renderer.strumGroup.members.length;
 		var extra:Array<NotePositionData> = [];
 
-		for (lane in 0...strumCount) {
-			if (!checkLane(lane) || !checkPlayField(pf)) continue;
+		if (!hasCalledEvent) {
+			var alphaSub = getSubVal('alpha', 1.0);
+			if (alphaSub <= 0.001) return null;
 
-			for (c in 0...copyCount) {
-				var step = c + 1;
-				var defX = NoteMovement.defaultStrumX.length > lane ? NoteMovement.defaultStrumX[lane] : 0.0;
-				var defY = NoteMovement.defaultStrumY.length > lane ? NoteMovement.defaultStrumY[lane] : 0.0;
-				var defScale = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
-				var defSkewX = NoteMovement.defaultSkewX.length > lane ? NoteMovement.defaultSkewX[lane] : 0.0;
-				var defSkewY = NoteMovement.defaultSkewY.length > lane ? NoteMovement.defaultSkewY[lane] : 0.0;
+			var amountVal = getSubVal('amount', 1.0);
+			var copyCount = Std.int(Math.max(amountVal, 1));
 
-				var copyData = NotePositionData.get();
-				copyData.setupStrum(defX, defY, 0, lane, defScale, defScale, defSkewX, defSkewY, pf);
+			var offX = getSubVal('xoffset', 0.0) + getSubVal('offsetX', 0.0);
+			var offY = getSubVal('yoffset', 0.0) + getSubVal('offsetY', 0.0);
+			var offZ = getSubVal('zoffset', 0.0) + getSubVal('offsetZ', 0.0);
+			var offsetMult = getSubVal('offset', 1.0);
 
-				if (pf < renderer.playfields.length)
-					renderer.playfields[pf].applyOffsets(copyData);
+			var sc = getSubVal('scale', 1.0);
+			var scX = getSubVal('scaleX', 1.0) * sc;
+			var scY = getSubVal('scaleY', 1.0) * sc;
 
-				if (applyModsVal)
-					renderer.modifierTable.applyStrumMods(copyData, lane, pf);
+			var ang = getSubVal('angle', 0.0);
+			var angX = getSubVal('angleX', 0.0);
+			var angY = getSubVal('angleY', 0.0);
+			var angZ = getSubVal('angleZ', 0.0) + ang;
 
-				var totalOffX = offX * step * offsetMult;
-				var totalOffY = offY * step * offsetMult;
-				var totalOffZ = offZ * step * offsetMult;
+			var skX = getSubVal('skewX', 0.0);
+			var skY = getSubVal('skewY', 0.0);
 
-				copyData.x += totalOffX;
-				copyData.y += totalOffY;
-				copyData.z += totalOffZ;
+			var forceStaticVal = getSubVal('forceStatic', 1.0) > 0.5;
+			var applyModsVal = getSubVal('applyMods', 1.0) > 0.5;
 
-				copyData.scaleX = defScale * scX;
-				copyData.scaleY = defScale * scY;
+			for (lane in 0...strumCount) {
+				if (!checkLane(lane) || !checkPlayField(pf)) continue;
 
-				copyData.angleX += angX;
-				copyData.angleY += angY;
-				copyData.angleZ += angZ;
+				for (c in 0...copyCount) {
+					var step = c + 1;
+					var defX = NoteMovement.defaultStrumX.length > lane ? NoteMovement.defaultStrumX[lane] : 0.0;
+					var defY = NoteMovement.defaultStrumY.length > lane ? NoteMovement.defaultStrumY[lane] : 0.0;
+					var defScale = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
+					var defSkewX = NoteMovement.defaultSkewX.length > lane ? NoteMovement.defaultSkewX[lane] : 0.0;
+					var defSkewY = NoteMovement.defaultSkewY.length > lane ? NoteMovement.defaultSkewY[lane] : 0.0;
 
-				copyData.skewX += skX;
-				copyData.skewY += skY;
+					var copyData = NotePositionData.get();
+					copyData.setupStrum(defX, defY, 0, lane, defScale, defScale, defSkewX, defSkewY, pf);
 
-				var copyFade = (copyCount > 1) ? (1.0 - (c / copyCount) * 0.4) : 1.0;
-				copyData.alpha = Math.max(0.0, Math.min(1.0, finalAlpha * copyFade));
+					if (pf < renderer.playfields.length)
+						renderer.playfields[pf].applyOffsets(copyData);
 
-				copyData.forceStatic = forceStaticVal;
+					if (applyModsVal)
+						renderer.modifierTable.applyStrumMods(copyData, lane, pf);
 
-				copyData.finalizeColorFill();
-				extra.push(copyData);
+					copyData.x += offX * step * offsetMult;
+					copyData.y += offY * step * offsetMult;
+					copyData.z += offZ * step * offsetMult;
+
+					copyData.scaleX = defScale * scX;
+					copyData.scaleY = defScale * scY;
+
+					copyData.angleX += angX;
+					copyData.angleY += angY;
+					copyData.angleZ += angZ;
+
+					copyData.skewX += skX;
+					copyData.skewY += skY;
+
+					var copyFade = (copyCount > 1) ? (1.0 - (c / copyCount) * 0.4) : 1.0;
+					copyData.alpha = Math.max(0.0, Math.min(1.0, alphaSub * copyFade));
+					copyData.forceStatic = forceStaticVal;
+
+					copyData.finalizeColorFill();
+					extra.push(copyData);
+				}
 			}
+			return extra;
+		}
+
+		var curBeat = Modifier.beat;
+		var i = activeTrails.length - 1;
+		while (i >= 0) {
+			var trail = activeTrails[i];
+			var elapsedBeats = curBeat - trail.startBeat;
+			var progress = elapsedBeats / trail.durationBeats;
+
+			if (progress >= 1.0) {
+				activeTrails.splice(i, 1);
+				i--;
+				continue;
+			}
+
+			if (progress < 0) {
+				i--;
+				continue;
+			}
+
+			var easeFunc = ModchartUtil.getFlxEaseByString(trail.easeName);
+			var eased = easeFunc(Math.max(0.0, Math.min(1.0, progress)));
+			var curAlpha = trail.startAlpha * (1.0 - eased);
+
+			if (curAlpha <= 0.001) {
+				activeTrails.splice(i, 1);
+				i--;
+				continue;
+			}
+
+			var copyCount = trail.amount;
+
+			for (lane in 0...strumCount) {
+				if (!checkLane(lane) || !checkPlayField(pf)) continue;
+
+				for (c in 0...copyCount) {
+					var step = c + 1;
+					var defX = NoteMovement.defaultStrumX.length > lane ? NoteMovement.defaultStrumX[lane] : 0.0;
+					var defY = NoteMovement.defaultStrumY.length > lane ? NoteMovement.defaultStrumY[lane] : 0.0;
+					var defScale = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
+					var defSkewX = NoteMovement.defaultSkewX.length > lane ? NoteMovement.defaultSkewX[lane] : 0.0;
+					var defSkewY = NoteMovement.defaultSkewY.length > lane ? NoteMovement.defaultSkewY[lane] : 0.0;
+
+					var copyData = NotePositionData.get();
+					copyData.setupStrum(defX, defY, 0, lane, defScale, defScale, defSkewX, defSkewY, pf);
+
+					if (pf < renderer.playfields.length)
+						renderer.playfields[pf].applyOffsets(copyData);
+
+					if (trail.applyMods)
+						renderer.modifierTable.applyStrumMods(copyData, lane, pf);
+
+					var curOffX = trail.offX * step * trail.offsetMult * eased;
+					var curOffY = trail.offY * step * trail.offsetMult * eased;
+					var curOffZ = trail.offZ * step * trail.offsetMult * eased;
+
+					copyData.x += curOffX;
+					copyData.y += curOffY;
+					copyData.z += curOffZ;
+
+					copyData.scaleX = defScale * trail.scX;
+					copyData.scaleY = defScale * trail.scY;
+
+					copyData.angleX += trail.angX * eased;
+					copyData.angleY += trail.angY * eased;
+					copyData.angleZ += trail.angZ * eased;
+
+					copyData.skewX += trail.skX * eased;
+					copyData.skewY += trail.skY * eased;
+
+					var copyFade = (copyCount > 1) ? (1.0 - (c / copyCount) * 0.4) : 1.0;
+					copyData.alpha = Math.max(0.0, Math.min(1.0, curAlpha * copyFade));
+					copyData.forceStatic = trail.forceStatic;
+
+					copyData.finalizeColorFill();
+					extra.push(copyData);
+				}
+			}
+			i--;
 		}
 
 		return extra;
