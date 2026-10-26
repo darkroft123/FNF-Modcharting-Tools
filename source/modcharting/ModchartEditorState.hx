@@ -305,6 +305,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		RingModifier,
 		TrailModifier,
 		CopySpriteModifier,
+		CopyStrumModifier,
 		WormModifier,
 		// Target Modifiers
 		RotateModifier,
@@ -2054,6 +2055,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			'RingModifier' => "Makes notes orbit in a 3D ring/hoop shape. SubMods: speed (rotation speed), amplitude (ring radius).",
 			'TrailModifier' => "Creates fading ghost trails behind each note as it scrolls. SubMods: segments (ghost count), spacing (distance between ghosts), speed, alpha (starting opacity).",
 			'CopySpriteModifier' => "Crea copias/trail de la nota arriba del strum al llegar o ser tocada/presionada. SubMods: amount (cantidad, def 1), offsetX, offsetY (def -50), offsetZ, offset, speed, alpha, hitWindow.",
+			'CopyStrumModifier' => "Copies the static idle strum sprite, appearing and fading out via ease events. Offsets shift it from its origin. SubMods: alpha, xoffset, yoffset, zoffset, fade, amount, offset, scale, scaleX, scaleY, angle, angleX, angleY, angleZ, skewX, skewY, forceStatic, applyMods.",
 			'WormModifier' => "Filas completas de strums fantasma que se extienden a la derecha. SubMods: spacing (separación entre filas), count (total de copias), speed (velocidad de scroll).",
 			'SawtoothModifier' => "Makes notes move in a sawtooth.",
 			'DigitalModifier' => "Makes notes move in a digital pattern.",

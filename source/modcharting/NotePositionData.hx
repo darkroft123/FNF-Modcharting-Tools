@@ -30,6 +30,7 @@ class NotePositionData implements IFlxDestroyable {
 	public var playfieldIndex:Int;
 
 	public var isStrum:Bool;
+	public var forceStatic:Bool = false;
 	public var isSustain:Bool = false;
 
 	public var incomingAngleX:Float;
@@ -121,6 +122,7 @@ class NotePositionData implements IFlxDestroyable {
 		this.noteDist = 0;
 
 		this.isStrum = true;
+		this.forceStatic = false;
 		this.isSustain = false;
 
 		this.incomingAngleX = 0;
@@ -173,6 +175,7 @@ class NotePositionData implements IFlxDestroyable {
 		this.noteDist = noteDist;
 
 		this.isStrum = false;
+		this.forceStatic = false;
 		this.isSustain = isSustain;
 
 		this.incomingAngleX = iaX;

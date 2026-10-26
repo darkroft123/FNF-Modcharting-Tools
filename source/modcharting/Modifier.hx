@@ -23,6 +23,8 @@ import lime.math.Vector4;
 import haxe.ds.List;
 import flixel.group.FlxGroup.FlxTypedGroup;
 
+using StringTools;
+
 enum ModifierType {
 	ALL;
 	PLAYERONLY;
@@ -149,7 +151,11 @@ class Modifier {
 
 	public dynamic function gatherExtraStrumData(pf:Int):Array<NotePositionData> { return null; }
 
+	public dynamic function hasExtraStrumData():Bool { return false; }
+
 	public dynamic function gatherExtraNoteData(pf:Int):Array<NotePositionData> { return null; }
+
+	public dynamic function hasExtraNoteData():Bool { return false; }
 
 	public inline function checkPlayField(pf:Int):Bool // returns true if should display on current playfield
 	{
@@ -2618,6 +2624,149 @@ class CopySpriteModifier extends Modifier {
 			daNote.x = origX;
 			daNote.y = origY;
 		}
+		return extra;
+	}
+}
+
+class CopyStrumModifier extends Modifier {
+	override function setupSubValues() {
+		subValues.set('alpha', new ModifierSubValue(1.0));
+		subValues.set('xoffset', new ModifierSubValue(0.0));
+		subValues.set('yoffset', new ModifierSubValue(0.0));
+		subValues.set('zoffset', new ModifierSubValue(0.0));
+		subValues.set('amount', new ModifierSubValue(1.0));
+		subValues.set('offset', new ModifierSubValue(1.0));
+		subValues.set('scale', new ModifierSubValue(1.0));
+		subValues.set('scaleX', new ModifierSubValue(1.0));
+		subValues.set('scaleY', new ModifierSubValue(1.0));
+		subValues.set('angle', new ModifierSubValue(0.0));
+		subValues.set('angleX', new ModifierSubValue(0.0));
+		subValues.set('angleY', new ModifierSubValue(0.0));
+		subValues.set('angleZ', new ModifierSubValue(0.0));
+		subValues.set('skewX', new ModifierSubValue(0.0));
+		subValues.set('skewY', new ModifierSubValue(0.0));
+		subValues.set('fade', new ModifierSubValue(1.0));
+		subValues.set('forceStatic', new ModifierSubValue(1.0));
+		subValues.set('applyMods', new ModifierSubValue(1.0));
+	}
+
+	function getSubVal(key1:String, ?key2:String, defaultVal:Float = 0.0):Float {
+		if (key2 != null && subValues.exists(key2)) {
+			var sub2 = subValues.get(key2);
+			if (sub2.value != sub2.baseValue) return sub2.value;
+		}
+		if (subValues.exists(key1)) {
+			var sub1 = subValues.get(key1);
+			if (sub1.value != sub1.baseValue) return sub1.value;
+			return sub1.value;
+		}
+		if (key2 != null && subValues.exists(key2)) return subValues.get(key2).value;
+		return defaultVal;
+	}
+
+	override function gatherExtraStrumData(pf:Int):Array<NotePositionData> {
+		if (currentValue == baseValue || renderer == null) return null;
+
+		var progress = Math.max(0.0, Math.min(1.0, Math.abs(currentValue)));
+
+		if (progress >= 1.0) {
+			currentValue = baseValue;
+			return null;
+		}
+
+		if (progress <= 0.0001) return null;
+
+		var alphaVal = getSubVal('alpha', 'opacity', 1.0);
+		var fadeVal = Std.int(getSubVal('fade', 1.0));
+
+		var alphaMult:Float = 1.0;
+		switch (fadeVal) {
+			case 0:
+				alphaMult = 1.0 - progress;
+			case 2:
+				alphaMult = (progress < 0.2) ? (progress / 0.2) : ((1.0 - progress) / 0.8);
+			default:
+				alphaMult = Math.sin(progress * Math.PI);
+		}
+
+		var finalAlpha = Math.max(0.0, Math.min(1.0, alphaVal * alphaMult));
+		if (finalAlpha <= 0.001) return null;
+
+		var extra:Array<NotePositionData> = [];
+		var amountVal = getSubVal('amount', 'count', 1.0);
+		var copyCount = Std.int(Math.max(amountVal, 1));
+
+		var offX = getSubVal('xoffset', 'offsetX', 0.0);
+		var offY = getSubVal('yoffset', 'offsetY', 0.0);
+		var offZ = getSubVal('zoffset', 'offsetZ', 0.0);
+		var offsetMult = getSubVal('offset', 'spacing', 1.0);
+
+		var sc = getSubVal('scale', 1.0);
+		var scX = getSubVal('scaleX', 1.0) * sc;
+		var scY = getSubVal('scaleY', 1.0) * sc;
+
+		var ang = getSubVal('angle', 'angleZ', 0.0);
+		var angX = getSubVal('angleX', 0.0);
+		var angY = getSubVal('angleY', 0.0);
+		var angZ = getSubVal('angleZ', 'angle', 0.0);
+		if (ang != 0 && angZ == 0) angZ = ang;
+
+		var skX = getSubVal('skewX', 0.0);
+		var skY = getSubVal('skewY', 0.0);
+
+		var forceStaticVal = getSubVal('forceStatic', 'static', 1.0) > 0.5;
+		var applyModsVal = getSubVal('applyMods', 'inheritMods', 1.0) > 0.5;
+
+		var strumCount = renderer.strumGroup.members.length;
+
+		for (lane in 0...strumCount) {
+			if (!checkLane(lane) || !checkPlayField(pf)) continue;
+
+			for (c in 0...copyCount) {
+				var step = c + 1;
+				var defX = NoteMovement.defaultStrumX.length > lane ? NoteMovement.defaultStrumX[lane] : 0.0;
+				var defY = NoteMovement.defaultStrumY.length > lane ? NoteMovement.defaultStrumY[lane] : 0.0;
+				var defScale = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
+				var defSkewX = NoteMovement.defaultSkewX.length > lane ? NoteMovement.defaultSkewX[lane] : 0.0;
+				var defSkewY = NoteMovement.defaultSkewY.length > lane ? NoteMovement.defaultSkewY[lane] : 0.0;
+
+				var copyData = NotePositionData.get();
+				copyData.setupStrum(defX, defY, 0, lane, defScale, defScale, defSkewX, defSkewY, pf);
+
+				if (pf < renderer.playfields.length)
+					renderer.playfields[pf].applyOffsets(copyData);
+
+				if (applyModsVal)
+					renderer.modifierTable.applyStrumMods(copyData, lane, pf);
+
+				var totalOffX = offX * step * offsetMult * progress;
+				var totalOffY = offY * step * offsetMult * progress;
+				var totalOffZ = offZ * step * offsetMult * progress;
+
+				copyData.x += totalOffX;
+				copyData.y += totalOffY;
+				copyData.z += totalOffZ;
+
+				copyData.scaleX = defScale * (1.0 + (scX - 1.0) * progress);
+				copyData.scaleY = defScale * (1.0 + (scY - 1.0) * progress);
+
+				copyData.angleX = angX * progress;
+				copyData.angleY = angY * progress;
+				copyData.angleZ = angZ * progress;
+
+				copyData.skewX = defSkewX + (skX * progress);
+				copyData.skewY = defSkewY + (skY * progress);
+
+				var copyFade = (copyCount > 1) ? (1.0 - (c / copyCount) * 0.4) : 1.0;
+				copyData.alpha = Math.max(0.0, Math.min(1.0, finalAlpha * copyFade));
+
+				copyData.forceStatic = forceStaticVal;
+
+				copyData.finalizeColorFill();
+				extra.push(copyData);
+			}
+		}
+
 		return extra;
 	}
 }

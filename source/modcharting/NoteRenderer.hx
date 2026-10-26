@@ -96,15 +96,49 @@ class NoteRenderer {
 		var oldY = strumNote.y;
 		var oldScaleX = strumNote.scale.x;
 		var oldScaleY = strumNote.scale.y;
+		var oldOffsetX = strumNote.offset.x;
+		var oldOffsetY = strumNote.offset.y;
+		var oldOriginX = strumNote.origin.x;
+		var oldOriginY = strumNote.origin.y;
+
+		var oldAnim:String = null;
+		var oldFrame:Int = 0;
+		if (noteData.forceStatic && strumNote.animation != null && strumNote.animation.curAnim != null) {
+			if (strumNote.animation.curAnim.name != "static" && strumNote.animation.getByName("static") != null) {
+				oldAnim = strumNote.animation.curAnim.name;
+				oldFrame = strumNote.animation.curAnim.curFrame;
+				#if (PSYCH || LEATHER)
+				if (Reflect.hasField(strumNote, "playAnim"))
+					Reflect.callMethod(strumNote, Reflect.field(strumNote, "playAnim"), ["static", true]);
+				else
+					strumNote.animation.play("static", true);
+				#else
+				strumNote.animation.play("static", true);
+				#end
+			}
+		}
 
 		ModchartUtil.applyCameraZoomToSprite(strumNote, noteData.camera, noteData.cameraZoom);
 
 		strumNote.draw();
 
+		if (oldAnim != null && strumNote.animation != null) {
+			#if (PSYCH || LEATHER)
+			if (Reflect.hasField(strumNote, "playAnim"))
+				Reflect.callMethod(strumNote, Reflect.field(strumNote, "playAnim"), [oldAnim, true]);
+			else
+				strumNote.animation.play(oldAnim, true, false, oldFrame);
+			#else
+			strumNote.animation.play(oldAnim, true, false, oldFrame);
+			#end
+		}
+
 		strumNote.x = oldX;
 		strumNote.y = oldY;
 		strumNote.scale.x = oldScaleX;
 		strumNote.scale.y = oldScaleY;
+		strumNote.offset.set(oldOffsetX, oldOffsetY);
+		strumNote.origin.set(oldOriginX, oldOriginY);
 	}
 
 	public static function drawNote(renderer:PlayfieldRenderer, noteData:NotePositionData):Void {

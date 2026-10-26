@@ -28,7 +28,8 @@
 
 	TimeStopModifier, StrumAngleModifier, JumpTargetModifier, JumpNotesModifier,
 
-	LaneStealthModifier, EaseXModifier, HiddenModifier, SuddenModifier, NotesModifier, TargetsModifier
+	LaneStealthModifier, EaseXModifier, HiddenModifier, SuddenModifier, NotesModifier, TargetsModifier,
+	TrailModifier, CopySpriteModifier, CopyStrumModifier, WormModifier
 
 --To move betwen center right and left i show you this shits
 MIDSCROLL:

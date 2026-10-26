@@ -221,7 +221,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				_notePositions.push(strumData);
 			}
 			for (mod in modifierTable.modsArray) {
-				if (mod.currentValue != mod.baseValue) {
+				if (mod.currentValue != mod.baseValue || mod.hasExtraStrumData()) {
 					var extra = mod.gatherExtraStrumData(pf);
 					if (extra != null) {
 						for (data in extra) {
@@ -268,7 +268,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 				_notePositions.push(noteData);
 			}
 			for (mod in modifierTable.modsArray) {
-				if (mod.currentValue != mod.baseValue) {
+				if (mod.currentValue != mod.baseValue || mod.hasExtraNoteData()) {
 					var extra = mod.gatherExtraNoteData(pf);
 					if (extra != null) {
 						for (data in extra) {
