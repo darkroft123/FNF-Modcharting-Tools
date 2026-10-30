@@ -29,7 +29,15 @@ class ModchartEventManager {
 			events = events.slice(eventIndex);
 			eventIndex = 0;
 		}
+		#if LEATHER
+		try {
+			Modifier.beat = Conductor.getBeat(Conductor.songPosition);
+		} catch(e:Dynamic) {
+			Modifier.beat = ((Conductor.songPosition * 0.001) * (Conductor.bpm / 60));
+		}
+		#else
 		Modifier.beat = ((Conductor.songPosition * 0.001) * (Conductor.bpm / 60));
+		#end
 	}
 
 	public inline function addEvent(beat:Float, func:Array<String>->Void, args:Array<String>) {

@@ -138,14 +138,16 @@ class NoteRenderer {
 			return;
 
 		var changeX:Bool = noteData.z != 0;
-		var daNote:Dynamic = (noteData.customSprite != null) ? noteData.customSprite : (noteData.index >= 0 && noteData.index < renderer.notes.members.length ? renderer.notes.members[noteData.index] : null);
+		var daNote:flixel.FlxSprite = (noteData.customSprite != null) ? noteData.customSprite : (noteData.index >= 0 && noteData.index < renderer.notes.members.length ? renderer.notes.members[noteData.index] : null);
 		if (daNote == null)
 			return;
 		var thisNotePos:Vector3D;
 
+		var noteOffsetX:Float = (Std.isOfType(daNote, Note)) ? ModchartUtil.getNoteOffsetX(cast daNote, renderer.instance) : 0;
+
 		if (changeX) {
 			_vec3b.setTo(
-				noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, renderer.instance),
+				noteData.x + (daNote.width / 2) + noteOffsetX,
 				noteData.y + (daNote.height / 2),
 				noteData.z * 0.001
 			);
@@ -160,9 +162,10 @@ class NoteRenderer {
 			thisNotePos = _vec3;
 		}
 
-		if (daNote.isSustainNote == true) {
+		if (Std.isOfType(daNote, FlxSprite3D) && cast(daNote, FlxSprite3D).isSustainNote) {
 			if (daNote.animation != null && daNote.animation.curAnim != null && !daNote.animation.curAnim.name.endsWith("end")) {
-				noteData.scaleY *= SustainRenderer.sustainScaleMultiplier(daNote, noteData.lane);
+				if (Std.isOfType(daNote, Note))
+					noteData.scaleY *= SustainRenderer.sustainScaleMultiplier(cast daNote, noteData.lane);
 			}
 		}
 

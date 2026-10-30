@@ -55,6 +55,7 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 	public var modchart:ModchartFile;
 	public var inEditor:Bool = false;
 	public var editorPaused:Bool = false;
+	public var lastSongPos:Float = -999999;
 
 	public var speed:Float = 1.0;
 
@@ -115,8 +116,16 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 			#else
 			var scaledElapsed = elapsed;
 			#end
-			tweenManager.update(scaledElapsed); // should be automatically paused when you pause in game
-			timerManager.update(scaledElapsed);
+			var deltaToUse:Float = scaledElapsed;
+			if (lastSongPos != -999999 && !editorPaused) {
+				var songDelta:Float = (Conductor.songPosition - lastSongPos) * 0.001;
+				if (songDelta > 0 && songDelta < 0.5) {
+					deltaToUse = songDelta;
+				}
+			}
+			lastSongPos = Conductor.songPosition;
+			tweenManager.update(deltaToUse); // synchronized to song position
+			timerManager.update(deltaToUse);
 		} catch (e) {
 			trace(e);
 		}

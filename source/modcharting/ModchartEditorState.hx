@@ -304,6 +304,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		SpiralZModifier,
 		RingModifier,
 		TrailModifier,
+		SetTweenModifier,
 		CopySpriteModifier,
 		CopyStrumModifier,
 		WormModifier,
@@ -1368,6 +1369,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				break;
 			}
 		}
+		highlightedEvent = null;
 		updateEventSprites();
 	}
 
@@ -2054,7 +2056,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			'SpiralZModifier' => "Makes notes move in a spiral (Z axis).  Best combined with reverse 0.5 and flip 0.5.",
 			'RingModifier' => "Makes notes orbit in a 3D ring/hoop shape. SubMods: speed (rotation speed), amplitude (ring radius).",
 			'TrailModifier' => "Creates fading ghost trails behind each note as it scrolls. SubMods: segments (ghost count), spacing (distance between ghosts), speed, alpha (starting opacity).",
+			'SetTweenModifier' => "Clase base global para modifiers temporales/efimeros que entran con valor y hacen tween a 0.",
 			'CopySpriteModifier' => "When active (1), creates fading ghost copies of colored notes as they reach the strum. SubMods: x, y, z, alpha, amount, duration, scale, scaleX, scaleY, angle, angleX, angleY, angleZ, skewX, skewY, applyMods.",
+			'CopyNoteModifier' => "Alias de CopySpriteModifier.",
 			'CopyStrumModifier' => "Copies the static idle strum sprite. Events create fading trail ghosts. SubMods: x, y, z, alpha, amount, scale, scaleX, scaleY, angle, angleX, angleY, angleZ, skewX, skewY, forceStatic, applyMods.",
 			'WormModifier' => "Filas completas de strums fantasma que se extienden a la derecha. SubMods: spacing (separación entre filas), count (total de copias), speed (velocidad de scroll).",
 			'SawtoothModifier' => "Makes notes move in a sawtooth.",

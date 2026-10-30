@@ -229,6 +229,18 @@ class ModchartFuncs
 			mod = Type.resolveClass('modcharting.' + cap);
 			if (mod == null) mod = Type.resolveClass('modcharting.' + cap + "Modifier");
 		}
+		if (mod == null) {
+			switch (modClass.toLowerCase()) {
+				case 'copystrum' | 'copystrummodifier':
+					mod = Type.resolveClass('modcharting.CopyStrumModifier');
+				case 'copysprite' | 'copyspritemodifier' | 'copynote' | 'copynotemodifier':
+					mod = Type.resolveClass('modcharting.CopySpriteModifier');
+				case 'settween' | 'settweenmodifier':
+					mod = Type.resolveClass('modcharting.SetTweenModifier');
+				case 'camera' | 'cameramodifier':
+					mod = Type.resolveClass('modcharting.CameraModifier');
+			}
+		}
 
 		if (mod != null)
 		{
@@ -273,11 +285,14 @@ class ModchartFuncs
             {
                 instance.playfieldRenderer.modchart.data.events.push(["set", [0, value+","+name+":"+subValName]]);
             }
-        if (instance.playfieldRenderer.modifiers.exists(name))
-            if (instance.playfieldRenderer.modifiers.get(name).subValues.exists(subValName))
-                instance.playfieldRenderer.modifiers.get(name).subValues.get(subValName).value = value;
+        if (instance.playfieldRenderer.modifiers.exists(name)) {
+            var mod = instance.playfieldRenderer.modifiers.get(name);
+            if (mod.subValues.exists(subValName))
+                mod.subValues.get(subValName).value = value;
             else
-                instance.playfieldRenderer.modifiers.get(name).subValues.set(subValName,new Modifier.ModifierSubValue(value));
+                mod.subValues.set(subValName, new Modifier.ModifierSubValue(value));
+            mod.onSubModEvent(subValName, value, 0, 'linear', Modifier.beat);
+        }
     }
    // Puts a cameramodifier's render layer behind an object by id/name
     // (characters, stage groups, lua sprites, camGame or camHUD objects...).
@@ -434,6 +449,7 @@ class ModchartFuncs
                                     subVal.value = value;
                                     subVal.name = null;
                                 }
+                                instance.playfieldRenderer.modifierTable.modifiers.get(modName).onSubModEvent(subModName, (Math.isNaN(value) ? 0 : value), 0, 'linear', beat);
                             }
                         }
                     }
@@ -460,6 +476,11 @@ class ModchartFuncs
         var args = argsAsString.trim().replace(' ', '').split(',');
 
         var func = function(arguments:Array<String>) {
+            var durationInSeconds:Float = (ModchartUtil.getTimeFromBeat(beat + time) - ModchartUtil.getTimeFromBeat(beat)) * 0.001;
+            if (durationInSeconds <= 0)
+                durationInSeconds = time * Conductor.crochet * 0.001;
+            if (durationInSeconds <= 0)
+                durationInSeconds = 0.001;
             
             for (i in 0...Math.floor(arguments.length/2))
             {
@@ -485,13 +506,13 @@ class ModchartFuncs
                         subVal.value = 0;
                         continue;
                     }
-                    instance.playfieldRenderer.modifierTable.tweenModifierSubValue(modName, subModName, value, time*Conductor.crochet*0.001, ease, beat, tag);
+                    instance.playfieldRenderer.modifierTable.tweenModifierSubValue(modName, subModName, value, durationInSeconds, ease, beat, tag);
                 }
                 else
                 {
                     if (name == 'camera' && !instance.playfieldRenderer.modifierTable.modifiers.exists(name))
                         name = 'cameramodifier';
-                    instance.playfieldRenderer.modifierTable.tweenModifier(name, value, time*Conductor.crochet*0.001, ease, beat, tag);
+                    instance.playfieldRenderer.modifierTable.tweenModifier(name, value, durationInSeconds, ease, beat, tag);
                 }
                 
             }

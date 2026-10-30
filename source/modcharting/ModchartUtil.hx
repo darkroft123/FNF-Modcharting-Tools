@@ -294,6 +294,13 @@ if (_easeMap == null) {
 }
 
 	public static function getTimeFromBeat(beat:Float) {
+		#if LEATHER
+		if (Conductor.bpmChangeMap != null) {
+			try {
+				return Conductor.getTimeInSteps(beat * 4);
+			} catch(e:Dynamic) {}
+		}
+		#end
 		var curBpm = PlayState.SONG != null ? PlayState.SONG.bpm : Conductor.bpm;
 		if (beat < 0) {
 			return beat * (60 / curBpm) * 1000;
