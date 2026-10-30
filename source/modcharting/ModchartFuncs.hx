@@ -239,6 +239,10 @@ class ModchartFuncs
 					mod = Type.resolveClass('modcharting.SetTweenModifier');
 				case 'camera' | 'cameramodifier':
 					mod = Type.resolveClass('modcharting.CameraModifier');
+				case 'colorfill' | 'colorfillmodifier':
+					mod = Type.resolveClass('modcharting.ColorFillModifier');
+				case 'colorfillrainbow' | 'colorfillrainbowmodifier':
+					mod = Type.resolveClass('modcharting.ColorFillRainbowModifier');
 			}
 		}
 
@@ -287,6 +291,7 @@ class ModchartFuncs
             }
         if (instance.playfieldRenderer.modifiers.exists(name)) {
             var mod = instance.playfieldRenderer.modifiers.get(name);
+            subValName = mod.normalizeSubModName(subValName);
             if (mod.subValues.exists(subValName))
                 mod.subValues.get(subValName).value = value;
             else
@@ -439,18 +444,22 @@ class ModchartFuncs
                             modName = 'cameramodifier';
                         if (instance.playfieldRenderer.modifierTable.modifiers.exists(modName))
                         {
-                            var subVal = instance.playfieldRenderer.modifierTable.modifiers.get(modName).subValues.get(subModName);
-                            if (subVal != null)
+                            var mod = instance.playfieldRenderer.modifierTable.modifiers.get(modName);
+                            subModName = mod.normalizeSubModName(subModName);
+                            var subVal = mod.subValues.get(subModName);
+                            if (subVal == null)
                             {
-                                if (Math.isNaN(value))
-                                    subVal.name = rawValue; // non-numeric: a named/id subvalue (e.g. camera layer)
-                                else
-                                {
-                                    subVal.value = value;
-                                    subVal.name = null;
-                                }
-                                instance.playfieldRenderer.modifierTable.modifiers.get(modName).onSubModEvent(subModName, (Math.isNaN(value) ? 0 : value), 0, 'linear', beat);
+                                subVal = new Modifier.ModifierSubValue(0.0);
+                                mod.subValues.set(subModName, subVal);
                             }
+                            if (Math.isNaN(value))
+                                subVal.name = rawValue; // non-numeric: a named/id subvalue (e.g. camera layer)
+                            else
+                            {
+                                subVal.value = value;
+                                subVal.name = null;
+                            }
+                            mod.onSubModEvent(subModName, (Math.isNaN(value) ? 0 : value), 0, 'linear', beat);
                         }
                     }
                 }
@@ -498,15 +507,19 @@ class ModchartFuncs
                         modName = 'cameramodifier';
                     var subVal:Dynamic = null;
                     if (instance.playfieldRenderer.modifierTable.modifiers.exists(modName))
-                        subVal = instance.playfieldRenderer.modifierTable.modifiers.get(modName).subValues.get(subModName);
-                    if (subVal != null && Math.isNaN(Std.parseFloat(rawValue)))
                     {
-                        // non-numeric: a named/id subvalue (e.g. camera:layer = "dad")
-                        subVal.name = rawValue;
-                        subVal.value = 0;
-                        continue;
+                        var mod = instance.playfieldRenderer.modifierTable.modifiers.get(modName);
+                        subModName = mod.normalizeSubModName(subModName);
+                        subVal = mod.subValues.get(subModName);
+                        if (subVal != null && Math.isNaN(Std.parseFloat(rawValue)))
+                        {
+                            // non-numeric: a named/id subvalue (e.g. camera:layer = "dad")
+                            subVal.name = rawValue;
+                            subVal.value = 0;
+                            continue;
+                        }
+                        instance.playfieldRenderer.modifierTable.tweenModifierSubValue(modName, subModName, value, durationInSeconds, ease, beat, tag);
                     }
-                    instance.playfieldRenderer.modifierTable.tweenModifierSubValue(modName, subModName, value, durationInSeconds, ease, beat, tag);
                 }
                 else
                 {

@@ -231,6 +231,18 @@ class Modifier {
 		if (altKey != null && subValues.exists(altKey)) return subValues.get(altKey).value;
 		return def;
 	}
+
+	public function hasActiveSubValues():Bool {
+		for (sub in subValues) {
+			if (sub.value != sub.baseValue)
+				return true;
+		}
+		return false;
+	}
+
+	public function normalizeSubModName(subMod:String):String {
+		return subMod;
+	}
 }
 
 /**
@@ -2351,6 +2363,16 @@ class ColorFillModifier extends Modifier {
 		subValues.set('alpha', new ModifierSubValue(1.0));
 	}
 
+	override public function normalizeSubModName(subMod:String):String {
+		switch (subMod.toLowerCase()) {
+			case 'r' | 'red': return 'r';
+			case 'g' | 'green': return 'g';
+			case 'b' | 'blue': return 'b';
+			case 'a' | 'alpha': return 'alpha';
+		}
+		return subMod;
+	}
+
 	override public function getNotePath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
 		noteMath(noteData, lane, curPos, pf);
 	}
@@ -2368,10 +2390,10 @@ class ColorFillModifier extends Modifier {
 	}
 
 	function applyColorFill(noteData:NotePositionData):Void {
-		var a = subValues.get('alpha').value;
-		var r = subValues.get('r').value;
-		var g = subValues.get('g').value;
-		var b = subValues.get('b').value;
+		var a = getSub('alpha', 'a', 1.0);
+		var r = getSub('r', 'red', 0.0);
+		var g = getSub('g', 'green', 0.0);
+		var b = getSub('b', 'blue', 0.0);
 
 		if (currentValue == baseValue && r == 0 && g == 0 && b == 0) return;
 		if (a <= 0) {
@@ -2395,6 +2417,7 @@ class ColorFillModifier extends Modifier {
 		noteData.colorFillAlphaExplicit = true;
 	}
 }
+class ColorFill extends ColorFillModifier {}
 
 class ColorFillRainbowModifier extends Modifier {
 	override function setupSubValues() {

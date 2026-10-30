@@ -331,10 +331,6 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		ColorTransformGreen,
 		ColorTransformBlue,
 		ColorTransformRainbow,
-		ColorFillRed,
-		ColorFillGreen,
-		ColorFillBlue,
-		ColorFillAlpha,
 		ColorFillModifier,
 		ColorFillRainbow,
 	];
@@ -1274,7 +1270,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		var leText = new StringBuf();
 		leText.add("Active Modifiers: \n");
 		for (mod in playfieldRenderer.modifierTable.modsArray) {
-			if (mod.currentValue != mod.baseValue) {
+			if (mod.currentValue != mod.baseValue || mod.hasActiveSubValues()) {
 				leText.add(mod.tag);
 				leText.add(": ");
 				leText.add(FlxMath.roundDecimal(mod.currentValue, 2));
@@ -1788,8 +1784,11 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	public function updateSubModList(modName:String) {
 		subMods = [""];
 		if (playfieldRenderer.modifierTable.modifiers.exists(modName)) {
-			for (subModName => subMod in playfieldRenderer.modifierTable.modifiers.get(modName).subValues) {
-				subMods.push(subModName);
+			var mod = playfieldRenderer.modifierTable.modifiers.get(modName);
+			for (subModName => subMod in mod.subValues) {
+				var norm = mod.normalizeSubModName(subModName);
+				if (!subMods.contains(norm))
+				subMods.push(norm);
 			}
 		}
 		subModDropDown.setData(FlxUIDropDownMenu.makeStrIdLabelArray(subMods, true));
@@ -2318,6 +2317,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			var modName = mods[Std.parseInt(mod)];
 			eventModInputText.text = modName;
 			updateSubModList(modName);
+			subModDropDown.selectedLabel = "";
 			eventModInputText.onTextChange.dispatch("", ""); // make sure it updates
 			hasUnsavedChanges = true;
 		});
@@ -2496,8 +2496,16 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			eventTimeInputText.text = highlightedEvent[EVENT_DATA][EVENT_EASETIME];
 		}
 		eventTypeDropDown.selectedLabel = highlightedEvent[EVENT_TYPE];
-		eventModInputText.text = getEventModData(true);
+		var modData = getEventModData(true);
+		eventModInputText.text = modData;
 		eventValueInputText.text = getEventModData(false);
+		var modParts = modData.split(":");
+		var baseMod = modParts[0];
+		updateSubModList(baseMod);
+		if (modParts.length > 1 && subMods.contains(modParts[1]))
+			subModDropDown.selectedLabel = modParts[1];
+		else
+			subModDropDown.selectedLabel = "";
 		repeatBeatGapStepper.value = highlightedEvent[EVENT_REPEAT][EVENT_REPEATBEATGAP];
 		repeatCountStepper.value = highlightedEvent[EVENT_REPEAT][EVENT_REPEATCOUNT];
 		repeatCheckbox.checked = highlightedEvent[EVENT_REPEAT][EVENT_REPEATBOOL];

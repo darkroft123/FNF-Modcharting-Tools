@@ -122,7 +122,10 @@ class NoteRenderer {
 
 		ModchartUtil.applyCameraZoomToSprite(strumNote, noteData.camera, noteData.cameraZoom);
 
+		var savedShader = strumNote.shader;
+		if (noteData.hasColorFill) strumNote.shader = null;
 		strumNote.draw();
+		strumNote.shader = savedShader;
 
 		strumNote.frame = oldFrame;
 		strumNote.x = oldX;

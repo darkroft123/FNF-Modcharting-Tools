@@ -132,7 +132,7 @@ class ModTable
         {
             var modList:Array<Modifier> = table[pf][lane];
             for (mod in modList) {
-                if (mod.currentValue != mod.baseValue)
+                if (mod.currentValue != mod.baseValue || mod.hasActiveSubValues())
                     mod.getStrumPath(noteData, lane, pf);
             }
         }
@@ -143,7 +143,7 @@ class ModTable
         {
             var modList:Array<Modifier> = table[pf][lane];
             for (mod in modList) {
-                if (mod.currentValue != mod.baseValue)
+                if (mod.currentValue != mod.baseValue || mod.hasActiveSubValues())
                     mod.getNotePath(noteData, lane, curPos, pf);
             }
         }
@@ -154,7 +154,7 @@ class ModTable
         {
             var modList:Array<Modifier> = table[pf][lane];
             for (mod in modList) {
-                if (mod.currentValue != mod.baseValue)
+                if (mod.currentValue != mod.baseValue || mod.hasActiveSubValues())
                     noteDist = mod.getNoteDist(noteDist, lane, 0, pf);
             }
         }
@@ -166,7 +166,7 @@ class ModTable
         {
             var modList:Array<Modifier> = table[pf][lane];
             for (mod in modList) {
-                if (mod.currentValue != mod.baseValue)
+                if (mod.currentValue != mod.baseValue || mod.hasActiveSubValues())
                     curPos = mod.getNoteCurPos(lane, curPos, pf);
             }
         }
@@ -250,6 +250,7 @@ class ModTable
         if (modifiers.exists(modifier))
         {       
             var mod = modifiers.get(modifier);
+            subValue = mod.normalizeSubModName(subValue);
             if (!mod.subValues.exists(subValue))
             {
                 mod.subValues.set(subValue, new Modifier.ModifierSubValue(0.0));
