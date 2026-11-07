@@ -243,6 +243,8 @@ class ModchartFuncs
 					mod = Type.resolveClass('modcharting.ColorFillModifier');
 				case 'colorfillrainbow' | 'colorfillrainbowmodifier':
 					mod = Type.resolveClass('modcharting.ColorFillRainbowModifier');
+				case 'sustainconnect' | 'sustainconnectmodifier':
+					mod = Type.resolveClass('modcharting.SustainConnectModifier');
 			}
 		}
 

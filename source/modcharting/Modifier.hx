@@ -1198,6 +1198,382 @@ class SustainTrapezoidModifier extends Modifier {
 }
 
 
+typedef OutgoingHoldInfo = {
+	var targetLane:Int;
+	var hasTargetSustain:Bool;
+}
+
+class SustainConnectModifier extends Modifier {
+	public static var currentInstance:SustainConnectModifier = null;
+
+	static var _lastFrame:Int = -1;
+	static var _lastSongPos:Float = -999999;
+	static var _lastLogTime:Float = -999999;
+	static var _outgoingNotes:Map<Dynamic, OutgoingHoldInfo> = new Map<Dynamic, OutgoingHoldInfo>();
+	static var _outgoingKeys:Map<String, OutgoingHoldInfo> = new Map<String, OutgoingHoldInfo>();
+	static var _incomingHeads:Map<Dynamic, Bool> = new Map<Dynamic, Bool>();
+	static var _incomingHeadKeys:Map<String, Bool> = new Map<String, Bool>();
+	static var _incomingParents:Map<Dynamic, Int> = new Map<Dynamic, Int>(); // parentNote -> sourceLane
+	static var _incomingParentKeys:Map<String, Int> = new Map<String, Int>();
+
+	public function new(tag:String, ?type:ModifierType = ALL, ?playfield:Int = -1) {
+		super(tag, type, playfield);
+		currentInstance = this;
+		currentValue = 0.0;
+		baseValue = 0.0;
+		trace('[SustainConnect] Instance created: tag="' + tag + '", type=' + type + ', pf=' + playfield + ', val=' + currentValue);
+	}
+
+	override function setupSubValues() {
+		baseValue = 0.0;
+		currentValue = 0.0;
+		var sub = new ModifierSubValue(65.0);
+		sub.baseValue = 65.0;
+		subValues.set('tolerance', sub);
+	}
+
+	override public function hasActiveSubValues():Bool {
+		return Math.abs(currentValue) > 0.001;
+	}
+
+	override public function getStrumPath(noteData:NotePositionData, lane:Int, pf:Int) {
+		if (Math.abs(currentValue) > 0.001) {
+			var curTicks:Int = (flixel.FlxG.game != null) ? flixel.FlxG.game.ticks : 0;
+			var curSongPos:Float = game.Conductor.songPosition;
+			if (renderer != null && (_lastFrame != curTicks || Math.abs(_lastSongPos - curSongPos) > 1.0)) {
+				rebuildFrameConnections(renderer);
+			}
+		}
+	}
+
+	override public function getNotePath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		if (Math.abs(currentValue) > 0.001) {
+			var curTicks:Int = (flixel.FlxG.game != null) ? flixel.FlxG.game.ticks : 0;
+			var curSongPos:Float = game.Conductor.songPosition;
+			if (renderer != null && (_lastFrame != curTicks || Math.abs(_lastSongPos - curSongPos) > 1.0)) {
+				rebuildFrameConnections(renderer);
+			}
+			noteMath(noteData, lane, curPos, pf);
+		}
+	}
+
+	public static inline function getParentNote(n:Dynamic):Dynamic {
+		if (n == null) return null;
+		if (Reflect.hasField(n, "parent") && Reflect.field(n, "parent") != null)
+			return Reflect.field(n, "parent");
+		var cur:Dynamic = n;
+		var depth:Int = 0;
+		while (cur != null && cur.isSustainNote == true && cur.prevNote != null && cur.prevNote != cur && depth < 200) {
+			cur = cur.prevNote;
+			depth++;
+		}
+		return cur;
+	}
+
+	public static inline function getNoteLane(n:Dynamic):Int {
+		if (n == null) return 0;
+		var raw:Int = (n.noteData != null) ? n.noteData : 0;
+		var mp:Bool = (n.mustPress == true);
+		var kc:Int = NoteMovement.keyCount;
+		var baseData:Int = (raw >= kc && mp) ? (raw - kc) : (raw % kc);
+		return mp ? (baseData + kc) : baseData;
+	}
+
+	public static inline function isFirstSustainSlice(daNote:Dynamic):Bool {
+		if (daNote == null || !daNote.isSustainNote) return false;
+		return (daNote.prevNote == null || !daNote.prevNote.isSustainNote);
+	}
+
+	public static function isHoldEndNote(daNote:Dynamic):Bool {
+		if (daNote == null || !daNote.isSustainNote) return false;
+		if (daNote.animation != null && daNote.animation.curAnim != null) {
+			var animName:String = daNote.animation.curAnim.name;
+			if (animName.endsWith("end")) return true;
+		}
+		if (daNote.sustains != null && daNote.sustains.length > 0) {
+			var sArr:Array<Dynamic> = cast daNote.sustains;
+			if (sArr[sArr.length - 1] == daNote) return true;
+		}
+		var p = getParentNote(daNote);
+		if (p != null && p != daNote && p.sustains != null && p.sustains.length > 0) {
+			var pArr:Array<Dynamic> = cast p.sustains;
+			if (pArr[pArr.length - 1] == daNote) return true;
+		}
+		return false;
+	}
+
+	public static function isOutgoingConnected(daNote:Dynamic):Bool {
+		if (daNote == null) return false;
+		if (currentInstance == null || Math.abs(currentInstance.currentValue) <= 0.001) return false;
+		var curTicks:Int = (flixel.FlxG.game != null) ? flixel.FlxG.game.ticks : 0;
+		var curSongPos:Float = game.Conductor.songPosition;
+		if (currentInstance.renderer != null && (_lastFrame != curTicks || Math.abs(_lastSongPos - curSongPos) > 1.0)) {
+			rebuildFrameConnections(currentInstance.renderer);
+		}
+		if (_outgoingNotes.exists(daNote)) return true;
+		var key:String = Math.round(daNote.strumTime) + "_" + getNoteLane(daNote);
+		return _outgoingKeys.exists(key);
+	}
+
+	public static function rebuildFrameConnections(r:PlayfieldRenderer):Void {
+		_lastFrame = (flixel.FlxG.game != null) ? flixel.FlxG.game.ticks : 0;
+		_lastSongPos = game.Conductor.songPosition;
+		_outgoingNotes.clear();
+		_outgoingKeys.clear();
+		_incomingHeads.clear();
+		_incomingHeadKeys.clear();
+		_incomingParents.clear();
+		_incomingParentKeys.clear();
+
+		var allNotesMap:Map<Dynamic, Bool> = new Map<Dynamic, Bool>();
+		var allNotesList:Array<Dynamic> = [];
+
+		inline function addNote(n:Dynamic) {
+			if (n != null && !allNotesMap.exists(n)) {
+				allNotesMap.set(n, true);
+				allNotesList.push(n);
+			}
+		}
+
+		if (r != null && r.notes != null && r.notes.members != null) {
+			for (n in r.notes.members) addNote(n);
+		}
+
+		if (r != null && r.instance != null) {
+			if (Reflect.hasField(r.instance, "loadedNotes")) {
+				var ln:Array<Dynamic> = Reflect.field(r.instance, "loadedNotes");
+				if (ln != null) for (n in ln) addNote(n);
+			}
+			if (Reflect.hasField(r.instance, "unspawnNotes")) {
+				var un:Array<Dynamic> = Reflect.field(r.instance, "unspawnNotes");
+				if (un != null) for (n in un) addNote(n);
+			}
+		}
+
+		var totalNotesCount:Int = allNotesList.length;
+		if (totalNotesCount == 0) return;
+
+		var tol:Float = (currentInstance != null && currentInstance.subValues.exists('tolerance')) ? currentInstance.subValues.get('tolerance').value : 65.0;
+
+		var nonTails:Map<Dynamic, Bool> = new Map<Dynamic, Bool>();
+		for (n in allNotesList) {
+			if (n != null && n.isSustainNote == true && n.prevNote != null && n.prevNote.isSustainNote == true) {
+				nonTails.set(n.prevNote, true);
+			}
+		}
+
+		var outgoingCandidates:Array<Dynamic> = [];
+		var incomingCandidates:Array<Dynamic> = [];
+
+		for (n in allNotesList) {
+			if (n == null) continue;
+
+			if (n.isSustainNote == true) {
+				if (isHoldEndNote(n) || !nonTails.exists(n)) {
+					outgoingCandidates.push(n);
+				}
+			} else {
+				// Only hold notes (notes with a sustain) can be candidates for slide connections!
+				// Tap notes (single notes with sustainLength <= 0) must never connect.
+				var hasSus:Bool = (n.sustainLength > 10.0 || (n.sustains != null && (cast n.sustains:Array<Dynamic>).length > 0));
+				if (hasSus) {
+					incomingCandidates.push(n);
+				}
+			}
+		}
+
+		if (Math.abs(_lastSongPos - _lastLogTime) > 1500.0 || (outgoingCandidates.length > 0 && incomingCandidates.length > 0)) {
+			_lastLogTime = _lastSongPos;
+			trace('[SustainConnect] Frame @ ' + Math.round(_lastSongPos) + 'ms: totalNotes=' + totalNotesCount + ', outTails=' + outgoingCandidates.length + ', inHeads=' + incomingCandidates.length + ', tol=' + tol);
+		}
+
+		if (outgoingCandidates.length == 0 || incomingCandidates.length == 0) return;
+
+		var keyCount:Int = NoteMovement.keyCount;
+		var pairs:Array<{outNote:Dynamic, inHead:Dynamic, laneDist:Int, timeDiff:Float}> = [];
+
+		for (outNote in outgoingCandidates) {
+			var laneA:Int = getNoteLane(outNote);
+			var isPlayerA:Bool = (laneA >= keyCount);
+
+			var pA = getParentNote(outNote);
+			var holdEndTime:Float = (pA != null && pA.sustainLength > 0) ? (pA.strumTime + pA.sustainLength) : (outNote.strumTime);
+
+			for (inHead in incomingCandidates) {
+				var laneB:Int = getNoteLane(inHead);
+				var isPlayerB:Bool = (laneB >= keyCount);
+
+				// Strict strumline separation: Opponent with Opponent, Player with Player
+				if (isPlayerA != isPlayerB) continue;
+
+				// Must connect to a different lane
+				if (laneA == laneB) continue;
+
+				var headStrumTime:Float = inHead.strumTime;
+
+				// CRITICAL (SAU-style): incoming note MUST start at or after the hold ends!
+				// It cannot start in the past before the hold has even completed!
+				var timeDiff:Float = headStrumTime - holdEndTime;
+				if (timeDiff < -15.0 || timeDiff > tol) continue;
+
+				var lDist:Int = Std.int(Math.abs(laneB - laneA));
+				pairs.push({
+					outNote: outNote,
+					inHead: inHead,
+					laneDist: lDist,
+					timeDiff: Math.abs(timeDiff)
+				});
+				trace('[SustainConnect] MATCH: Lane ' + laneA + ' (outEnd=' + Math.round(holdEndTime) + 'ms) -> Lane ' + laneB + ' (inStrum=' + Math.round(headStrumTime) + 'ms), diff=' + Math.round(timeDiff) + 'ms <= tol=' + tol);
+			}
+		}
+
+		if (pairs.length == 0) return;
+
+		// Sort candidate pairs: prioritize closest time match, then closest lane distance
+		pairs.sort(function(a, b) {
+			if (Math.abs(a.timeDiff - b.timeDiff) > 1.0)
+				return (a.timeDiff < b.timeDiff) ? -1 : 1;
+			return (a.laneDist < b.laneDist) ? -1 : 1;
+		});
+
+		var claimedOut:Map<Dynamic, Bool> = new Map<Dynamic, Bool>();
+		var claimedIn:Map<Dynamic, Bool> = new Map<Dynamic, Bool>();
+
+		for (pair in pairs) {
+			if (claimedOut.exists(pair.outNote) || claimedIn.exists(pair.inHead)) continue;
+
+			claimedOut.set(pair.outNote, true);
+			claimedIn.set(pair.inHead, true);
+
+			var lA = getNoteLane(pair.outNote);
+			var lB = getNoteLane(pair.inHead);
+			var hasSus:Bool = (pair.inHead.sustainLength > 0 || (pair.inHead.sustains != null && pair.inHead.sustains.length > 0));
+
+			var outInfo = { targetLane: lB, hasTargetSustain: hasSus };
+			_outgoingNotes.set(pair.outNote, outInfo);
+			var tailKey:String = Math.round(pair.outNote.strumTime) + "_" + lA;
+			_outgoingKeys.set(tailKey, outInfo);
+
+			if (hasSus) {
+				_incomingHeads.set(pair.inHead, true);
+				var headKey:String = Math.round(pair.inHead.strumTime) + "_" + lB;
+				_incomingHeadKeys.set(headKey, true);
+
+				_incomingParents.set(pair.inHead, lA);
+				_incomingParentKeys.set(headKey, lA);
+			}
+			trace('[SustainConnect] *** CONNECTED ***: Lane ' + lA + ' -> Lane ' + lB + ' (hasTargetSustain=' + hasSus + ')');
+		}
+	}
+
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		if (Math.abs(currentValue) <= 0.001) return;
+
+		var daNote = (renderer != null && renderer.notes != null && noteData.index >= 0 && noteData.index < renderer.notes.members.length) ? renderer.notes.members[noteData.index] : null;
+		if (daNote == null) return;
+
+		// 1. If this is a tap arrow (head note) receiving a hold connection into another sustain:
+		// Hide the arrow head just like in SAU (if (!note.isSustainNote) note.visible = false)
+		// so the sustain ribbon is 100% continuous and seamless!
+		if (!daNote.isSustainNote) {
+			var noteLane = noteData.lane;
+			var key:String = Math.round(daNote.strumTime) + "_" + noteLane;
+			if (_incomingHeads.exists(daNote) || _incomingHeadKeys.exists(key)) {
+				noteData.alpha = 0.0;
+				noteData.scaleX = 0.0;
+				noteData.scaleY = 0.0;
+				noteData.x = -9999;
+				noteData.y = -9999;
+				daNote.visible = false;
+			}
+			return;
+		}
+
+		var totalLanes:Int = NoteMovement.defaultStrumX.length;
+
+		// Check Case 1: Outgoing sustain slice (tail)
+		var tailKey:String = Math.round(daNote.strumTime) + "_" + noteData.lane;
+		var outInfo = _outgoingNotes.exists(daNote) ? _outgoingNotes.get(daNote) : (_outgoingKeys.exists(tailKey) ? _outgoingKeys.get(tailKey) : null);
+		if (outInfo != null) {
+			var laneA = noteData.lane;
+			var laneB = outInfo.targetLane;
+			if (laneA >= 0 && laneA < totalLanes && laneB >= 0 && laneB < totalLanes) {
+				var startX = NoteMovement.defaultStrumX[laneA];
+				var targetX = NoteMovement.defaultStrumX[laneB];
+				var deltaX = targetX - startX;
+
+				var pieceDuration:Float = SustainRenderer.getNoteSustainDuration(daNote);
+				var totalDelta:Float = pieceDuration * daNote.speed;
+				if (totalDelta <= 0.001) return;
+
+				var baseCurPos:Float = renderer.getNoteCurPos(noteData.index, 0);
+				if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && baseCurPos >= 0)
+					baseCurPos = 0;
+
+				var deltaCurPos:Float = baseCurPos - curPos;
+				var progress:Float = flixel.math.FlxMath.bound(deltaCurPos / totalDelta, 0.0, 1.0);
+
+				var ratio:Float = outInfo.hasTargetSustain ? 0.5 : 1.0;
+				var offset:Float = deltaX * (ratio * progress) * currentValue;
+				noteData.x += offset;
+			}
+			return;
+		}
+
+		// Check Case 2: Incoming sustain slice (first slice of the receiving note)
+		var parent = getParentNote(daNote);
+		var parentKey:String = (parent != null) ? (Math.round(parent.strumTime) + "_" + getNoteLane(parent)) : "";
+		var incomingSourceLane:Int = -1;
+		if (parent != null && _incomingParents.exists(parent)) {
+			incomingSourceLane = _incomingParents.get(parent);
+		} else if (parentKey != "" && _incomingParentKeys.exists(parentKey)) {
+			incomingSourceLane = _incomingParentKeys.get(parentKey);
+		}
+
+		if (incomingSourceLane != -1 && isFirstSustainSlice(daNote)) {
+			var laneA = incomingSourceLane;
+			var laneB = noteData.lane;
+			if (laneA >= 0 && laneA < totalLanes && laneB >= 0 && laneB < totalLanes) {
+				var startX = NoteMovement.defaultStrumX[laneA];
+				var targetX = NoteMovement.defaultStrumX[laneB];
+				var deltaX = targetX - startX;
+
+				var pieceDuration:Float = SustainRenderer.getNoteSustainDuration(daNote);
+				var totalDelta:Float = pieceDuration * daNote.speed;
+				if (totalDelta <= 0.001) return;
+
+				var baseCurPos:Float = renderer.getNoteCurPos(noteData.index, 0);
+				if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && baseCurPos >= 0)
+					baseCurPos = 0;
+
+				var deltaCurPos:Float = baseCurPos - curPos;
+				var progress:Float = flixel.math.FlxMath.bound(deltaCurPos / totalDelta, 0.0, 1.0);
+
+				var offset:Float = deltaX * (-0.5 * (1.0 - progress)) * currentValue;
+				noteData.x += offset;
+			}
+			return;
+		}
+	}
+
+	override public function reset() {
+		baseValue = 0.0;
+		currentValue = 0.0;
+		for (subMod in subValues)
+			subMod.value = subMod.baseValue;
+		_outgoingNotes.clear();
+		_outgoingKeys.clear();
+		_incomingHeads.clear();
+		_incomingHeadKeys.clear();
+		_incomingParents.clear();
+		_incomingParentKeys.clear();
+		_lastFrame = -1;
+		_lastSongPos = -999999;
+		_lastLogTime = -999999;
+	}
+}
+
+
 class JumpModifier extends Modifier // custom thingy i made
 {
 	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {

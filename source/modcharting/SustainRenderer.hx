@@ -173,6 +173,10 @@ class SustainRenderer {
 
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isHoldEnd = animName.endsWith("end");
+		var isConnected:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote);
+		if (isConnected) {
+			isHoldEnd = false;
+		}
 
 		var stepDuration = getNoteSustainDuration(daNote);
 		var timeToNextSustain = stepDuration;
@@ -193,23 +197,6 @@ class SustainRenderer {
 		var flipGraphic = (noteData.noteDist > 0);
 		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
 		var reverseClip = (fixedAngY > 90 && fixedAngY < 270);
-
-		if (isHoldEnd) {
-			var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
-			var capHeight:Float = daNote.frameHeight * baseScale;
-			var minHeight:Float = Math.max(8.0, capHeight * 0.25);
-			if (!flipGraphic) {
-				if (nextNotePos.y < thisNotePos.y + minHeight)
-					nextNotePos.y = thisNotePos.y + minHeight;
-				if (nextHalfNotePos.y < thisNotePos.y + (minHeight * 0.5))
-					nextHalfNotePos.y = thisNotePos.y + (minHeight * 0.5);
-			} else {
-				if (nextNotePos.y > thisNotePos.y - minHeight)
-					nextNotePos.y = thisNotePos.y - minHeight;
-				if (nextHalfNotePos.y > thisNotePos.y - (minHeight * 0.5))
-					nextHalfNotePos.y = thisNotePos.y - (minHeight * 0.5);
-			}
-		}
 
 		try {
 			var savedMeshShader = daNote.mesh.shader;

@@ -262,6 +262,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		BoomerangModifier,
 		WaveingModifier,
 		SustainTrapezoidModifier,
+		SustainConnectModifier,
 		TwirlModifier,
 		RollModifier,
 		// Stealth Modifiers
@@ -1954,6 +1955,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				playfieldStepper.value = currentModifier[MOD_PF];
 				if (currentModifier[MOD_LANE] != null)
 					targetLaneInputText.text = Std.string(currentModifier[MOD_LANE]);
+				if (modClassInputText.text != '')
+					explainText.text = ('Current Modifier: ${modClassInputText.text}, Explaination: ' + modifierExplain(modClassInputText.text));
 			}
 		});
 
@@ -2134,6 +2137,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			'BoomerangModifier' => "Modifier used to make notes come in reverse to target",
 			'WaveingModifier' => "Modifier used to make notes come faster and slower to target",
 			'SustainTrapezoidModifier' => "Modifier used to shape sustain note frames into an isosceles trapezoid",
+			'SustainConnectModifier' => "Connects consecutive sustain notes across lanes with a seamless 50/50 diagonal slide (SAU-style). SubMods: tolerance.",
 			'JumpModifier' => "Modifier used to make notes and target jump",
 			'WaveXModifier' => "Modifier similar to drunkX but this one will simulate a true wave in X (don't affect the notes)",
 			'WaveYModifier' => "Modifier similar to drunkY but this one will simulate a true wave in Y (don't affect the notes)",
