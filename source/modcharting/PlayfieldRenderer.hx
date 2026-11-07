@@ -334,8 +334,8 @@ class PlayfieldRenderer extends FlxSprite // extending flxsprite just so i can e
 		}
 	}
 
-	public inline function getSustainPoint(noteData:NotePositionData, timeOffset:Float):NotePositionData {
-		return SustainRenderer.getSustainPoint(this, noteData, timeOffset);
+	public inline function getSustainPoint(noteData:NotePositionData, timeOffset:Float, ?xOffset:Float = 0):NotePositionData {
+		return SustainRenderer.getSustainPoint(this, noteData, timeOffset, xOffset);
 	}
 
 	public function getCorrectScrollSpeed() {

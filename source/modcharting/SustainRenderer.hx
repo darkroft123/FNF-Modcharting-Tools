@@ -159,18 +159,6 @@ class SustainRenderer {
 		var noteW:Float = (daNote.frameWidth > 0 ? daNote.frameWidth : 160) * noteData.scaleX;
 		var noteOffsetX:Float = ModchartUtil.getNoteOffsetX(daNote, renderer.instance);
 
-		_vec3.setTo(
-			noteData.x + (noteW / 2) + noteOffsetX,
-			noteData.y + (NoteMovement.arrowSizes[noteData.lane] / 2),
-			noteData.z * 0.001
-		);
-		var thisNotePos = ModchartUtil.calculatePerspective(
-			_vec3,
-			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(noteW / 2),
-			yOffsetThingy - (NoteMovement.arrowSizes[noteData.lane] / 2)
-		);
-
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isOutgoing:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote);
 		var isIncoming:Bool = Modifier.SustainConnectModifier.isIncomingConnected(daNote);
@@ -193,29 +181,45 @@ class SustainRenderer {
 				timeToNextSustain = capDuration;
 		}
 
-		var timeOffsetEnd:Float = isHoldEnd ? -timeToNextSustain : -(timeToNextSustain + 1.5);
-		var nextHalfNotePos:NotePositionData = getSustainPoint(renderer, noteData, -timeToNextSustain * 0.5);
-		var nextNotePos:NotePositionData = getSustainPoint(renderer, noteData, timeOffsetEnd);
-
 		var connectModVal:Float = Modifier.SustainConnectModifier.getConnectValue();
+		var thisXOffset:Float = 0.0;
+		var halfXOffset:Float = 0.0;
+		var endXOffset:Float = 0.0;
+		var totalLanes:Int = NoteMovement.defaultStrumX.length;
+
 		if (connectModVal > 0.001) {
-			var totalLanes:Int = NoteMovement.defaultStrumX.length;
 			if (isOutgoing) {
 				var targetLane = Modifier.SustainConnectModifier.getOutgoingLane(daNote);
 				if (targetLane >= 0 && targetLane < totalLanes && lane >= 0 && lane < totalLanes) {
 					var deltaX = (NoteMovement.defaultStrumX[targetLane] - NoteMovement.defaultStrumX[lane]) * connectModVal;
-					nextHalfNotePos.x += deltaX * 0.25;
-					nextNotePos.x += deltaX * 0.50;
+					halfXOffset = deltaX * 0.25;
+					endXOffset = deltaX * 0.50;
 				}
 			} else if (isIncoming) {
 				var sourceLane = Modifier.SustainConnectModifier.getIncomingSourceLane(daNote);
 				if (sourceLane >= 0 && sourceLane < totalLanes && lane >= 0 && lane < totalLanes) {
 					var deltaX = (NoteMovement.defaultStrumX[lane] - NoteMovement.defaultStrumX[sourceLane]) * connectModVal;
-					thisNotePos.x -= deltaX * 0.50;
-					nextHalfNotePos.x -= deltaX * 0.25;
+					thisXOffset = -deltaX * 0.50;
+					halfXOffset = -deltaX * 0.25;
 				}
 			}
 		}
+
+		_vec3.setTo(
+			noteData.x + thisXOffset + (noteW / 2) + noteOffsetX,
+			noteData.y + (NoteMovement.arrowSizes[noteData.lane] / 2),
+			noteData.z * 0.001
+		);
+		var thisNotePos = ModchartUtil.calculatePerspective(
+			_vec3,
+			ModchartUtil.defaultFOV * (Math.PI / 180),
+			-(noteW / 2),
+			yOffsetThingy - (NoteMovement.arrowSizes[noteData.lane] / 2)
+		);
+
+		var timeOffsetEnd:Float = isHoldEnd ? -timeToNextSustain : -(timeToNextSustain + 1.5);
+		var nextHalfNotePos:NotePositionData = getSustainPoint(renderer, noteData, -timeToNextSustain * 0.5, halfXOffset);
+		var nextNotePos:NotePositionData = getSustainPoint(renderer, noteData, timeOffsetEnd, endXOffset);
 
 		var flipGraphic = (noteData.noteDist > 0);
 		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
@@ -239,7 +243,7 @@ class SustainRenderer {
 		NotePositionData.recycle(nextNotePos);
 	}
 
-	public static function getSustainPoint(renderer:PlayfieldRenderer, noteData:NotePositionData, timeOffset:Float):NotePositionData {
+	public static function getSustainPoint(renderer:PlayfieldRenderer, noteData:NotePositionData, timeOffset:Float, ?xOffset:Float = 0):NotePositionData {
 		var daNote = renderer.notes.members[noteData.index];
 		var songSpeed = daNote.speed;
 		var lane = noteData.lane;
@@ -263,7 +267,7 @@ class SustainRenderer {
 		var noteW:Float = (daNote.frameWidth > 0 ? daNote.frameWidth : 160) * result.scaleX;
 		var arrowSize = NoteMovement.arrowSizes[lane] / 2;
 		_vec3b.setTo(
-			result.x + (noteW / 2) + ModchartUtil.getNoteOffsetX(daNote, renderer.instance),
+			result.x + xOffset + (noteW / 2) + ModchartUtil.getNoteOffsetX(daNote, renderer.instance),
 			result.y + (NoteMovement.arrowSizes[result.lane] / 2),
 			result.z * 0.001
 		);
