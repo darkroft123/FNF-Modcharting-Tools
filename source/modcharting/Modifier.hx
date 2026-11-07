@@ -1203,8 +1203,11 @@ class SustainConnectModifier extends Modifier {
 
 	static var _lastFrame:Int = -1;
 	static var _lastSongPos:Float = -999999;
-	static var _outgoingLanes:Map<String, Int> = new Map<String, Int>();
-	static var _outgoingTargetTimes:Map<String, Float> = new Map<String, Float>();
+	static var _slideStartPct:Map<String, Float> = new Map<String, Float>();
+	static var _slideEndPct:Map<String, Float> = new Map<String, Float>();
+	static var _slideDeltaX:Map<String, Float> = new Map<String, Float>();
+	static var _slideIsTail:Map<String, Bool> = new Map<String, Bool>();
+	static var _slideTargetTime:Map<String, Float> = new Map<String, Float>();
 	static var _incomingHeads:Map<String, Bool> = new Map<String, Bool>();
 	static var _incomingParents:Map<String, Int> = new Map<String, Int>();
 
@@ -1297,13 +1300,14 @@ class SustainConnectModifier extends Modifier {
 	public static function isOutgoingConnected(daNote:Dynamic):Bool {
 		if (daNote == null || currentInstance == null || Math.abs(currentInstance.currentValue) <= 0.001) return false;
 		checkRebuild(currentInstance.renderer);
-		return _outgoingLanes.exists(noteKey(daNote));
+		var k = noteKey(daNote);
+		return _slideIsTail.exists(k) && _slideIsTail.get(k);
 	}
 
 	public static function getOutgoingTargetTime(daNote:Dynamic):Float {
 		if (daNote == null) return -1;
 		var key = noteKey(daNote);
-		return _outgoingTargetTimes.exists(key) ? _outgoingTargetTimes.get(key) : -1;
+		return _slideTargetTime.exists(key) ? _slideTargetTime.get(key) : -1;
 	}
 
 	public static function isIncomingConnected(daNote:Dynamic):Bool {
@@ -1317,8 +1321,11 @@ class SustainConnectModifier extends Modifier {
 	public static function rebuildFrameConnections(r:PlayfieldRenderer):Void {
 		_lastFrame = (flixel.FlxG.game != null) ? flixel.FlxG.game.ticks : 0;
 		_lastSongPos = game.Conductor.songPosition;
-		_outgoingLanes.clear();
-		_outgoingTargetTimes.clear();
+		_slideStartPct.clear();
+		_slideEndPct.clear();
+		_slideDeltaX.clear();
+		_slideIsTail.clear();
+		_slideTargetTime.clear();
 		_incomingHeads.clear();
 		_incomingParents.clear();
 
@@ -1415,8 +1422,61 @@ class SustainConnectModifier extends Modifier {
 
 			var lA = getNoteLane(p.outNote);
 			var lB = getNoteLane(p.inHead);
-			_outgoingLanes.set(outK, lB);
-			_outgoingTargetTimes.set(outK, p.inHead.strumTime);
+			var laneDist:Int = Std.int(Math.abs(lB - lA));
+			if (laneDist < 1) laneDist = 1;
+
+			var totalLanes:Int = NoteMovement.defaultStrumX.length;
+			var deltaX:Float = (lA >= 0 && lA < totalLanes && lB >= 0 && lB < totalLanes) ? (NoteMovement.defaultStrumX[lB] - NoteMovement.defaultStrumX[lA]) : 0;
+
+			// Outgoing slices (0% -> 50% of the slide)
+			var outSlices:Array<Dynamic> = [];
+			var curOut:Dynamic = p.outNote;
+			while (curOut != null && curOut.isSustainNote == true && outSlices.length < laneDist) {
+				outSlices.unshift(curOut);
+				if (curOut.prevNote == null || !curOut.prevNote.isSustainNote || curOut.prevNote == curOut)
+					break;
+				curOut = curOut.prevNote;
+			}
+			var numOut:Int = outSlices.length;
+			for (i in 0...numOut) {
+				var sPct:Float = (i / numOut) * 0.5;
+				var ePct:Float = ((i + 1) / numOut) * 0.5;
+				var sl = outSlices[i];
+				var k = noteKey(sl);
+				var isLast = (i == numOut - 1);
+				_slideStartPct.set(k, sPct);
+				_slideEndPct.set(k, ePct);
+				_slideDeltaX.set(k, deltaX);
+				_slideIsTail.set(k, isLast);
+				_slideTargetTime.set(k, isLast ? p.inHead.strumTime : -1);
+			}
+
+			// Incoming slices (50% -> 100% of the slide)
+			var inSlices:Array<Dynamic> = [];
+			if (p.inHead.sustains != null && p.inHead.sustains.length > 0) {
+				var inArr:Array<Dynamic> = cast p.inHead.sustains;
+				var maxIn = inArr.length;
+				var limit = (maxIn > 1) ? (maxIn - 1) : maxIn;
+				for (idx in 0...limit) {
+					if (inSlices.length >= laneDist) break;
+					inSlices.push(inArr[idx]);
+				}
+			}
+			var numIn:Int = (inSlices.length > 0) ? inSlices.length : 1;
+			if (inSlices.length > 0) {
+				for (i in 0...inSlices.length) {
+					var sPct:Float = 0.5 + (i / numIn) * 0.5;
+					var ePct:Float = 0.5 + ((i + 1) / numIn) * 0.5;
+					var sl = inSlices[i];
+					var k = noteKey(sl);
+					_slideStartPct.set(k, sPct);
+					_slideEndPct.set(k, ePct);
+					_slideDeltaX.set(k, deltaX);
+					_slideIsTail.set(k, false);
+					_slideTargetTime.set(k, -1);
+				}
+			}
+
 			_incomingHeads.set(inK, true);
 			_incomingParents.set(inK, lA);
 		}
@@ -1443,36 +1503,48 @@ class SustainConnectModifier extends Modifier {
 			return;
 		}
 
-		var pieceDur:Float = SustainRenderer.getNoteSustainDuration(daNote);
-		var totalDelta:Float = pieceDur * daNote.speed;
-		if (totalDelta <= 0.001) return;
+		if (_slideStartPct.exists(key)) {
+			var sPct = _slideStartPct.get(key);
+			var ePct = _slideEndPct.get(key);
+			var dX = _slideDeltaX.get(key);
+			var isTail = _slideIsTail.exists(key) && _slideIsTail.get(key);
+			var tgtTime = _slideTargetTime.exists(key) ? _slideTargetTime.get(key) : -1;
 
-		var baseCurPos:Float = renderer.getNoteCurPos(noteData.index, 0);
-		if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && baseCurPos >= 0)
-			baseCurPos = 0;
-
-		var progress:Float = flixel.math.FlxMath.bound((baseCurPos - curPos) / totalDelta, 0.0, 1.0);
-		var totalLanes:Int = NoteMovement.defaultStrumX.length;
-
-		// Case 1: Outgoing tail slides 0% -> 50% towards target lane
-		if (_outgoingLanes.exists(key)) {
-			var laneB = _outgoingLanes.get(key);
-			if (lane >= 0 && lane < totalLanes && laneB >= 0 && laneB < totalLanes) {
-				var deltaX = NoteMovement.defaultStrumX[laneB] - NoteMovement.defaultStrumX[lane];
-				noteData.x += deltaX * (0.5 * progress) * currentValue;
+			var pieceDur:Float = SustainRenderer.getNoteSustainDuration(daNote);
+			if (isTail && tgtTime > daNote.strumTime) {
+				pieceDur = tgtTime - daNote.strumTime;
 			}
+			var totalDelta:Float = pieceDur * daNote.speed;
+			if (totalDelta <= 0.001) return;
+
+			var baseCurPos:Float = renderer.getNoteCurPos(noteData.index, 0);
+			if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && baseCurPos >= 0)
+				baseCurPos = 0;
+
+			var progress:Float = flixel.math.FlxMath.bound((baseCurPos - curPos) / totalDelta, 0.0, 1.0);
+			var curPct:Float = sPct + (ePct - sPct) * progress;
+			noteData.x += dX * curPct * currentValue;
 			return;
 		}
 
-		// Case 2: Incoming first slice slides 50% -> 100% into target lane
+		// Fallback for incoming slice if sustains array wasn't available
 		if (isFirstSustainSlice(daNote)) {
 			var p = getParentNote(daNote);
 			var pKey = (p != null) ? noteKey(p) : "";
 			if (_incomingParents.exists(pKey)) {
 				var laneA = _incomingParents.get(pKey);
+				var totalLanes:Int = NoteMovement.defaultStrumX.length;
 				if (laneA >= 0 && laneA < totalLanes && lane >= 0 && lane < totalLanes) {
-					var deltaX = NoteMovement.defaultStrumX[lane] - NoteMovement.defaultStrumX[laneA];
-					noteData.x += deltaX * (-0.5 * (1.0 - progress)) * currentValue;
+					var pieceDur:Float = SustainRenderer.getNoteSustainDuration(daNote);
+					var totalDelta:Float = pieceDur * daNote.speed;
+					if (totalDelta > 0.001) {
+						var baseCurPos:Float = renderer.getNoteCurPos(noteData.index, 0);
+						if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && baseCurPos >= 0)
+							baseCurPos = 0;
+						var progress:Float = flixel.math.FlxMath.bound((baseCurPos - curPos) / totalDelta, 0.0, 1.0);
+						var deltaX = NoteMovement.defaultStrumX[lane] - NoteMovement.defaultStrumX[laneA];
+						noteData.x += deltaX * (-0.5 * (1.0 - progress)) * currentValue;
+					}
 				}
 			}
 		}
@@ -1483,8 +1555,11 @@ class SustainConnectModifier extends Modifier {
 		currentValue = 0.0;
 		for (subMod in subValues)
 			subMod.value = subMod.baseValue;
-		_outgoingLanes.clear();
-		_outgoingTargetTimes.clear();
+		_slideStartPct.clear();
+		_slideEndPct.clear();
+		_slideDeltaX.clear();
+		_slideIsTail.clear();
+		_slideTargetTime.clear();
 		_incomingHeads.clear();
 		_incomingParents.clear();
 		_lastFrame = -1;
