@@ -146,22 +146,23 @@ class NoteRenderer {
 			return;
 		var thisNotePos:Vector3D;
 
+		var noteW:Float = (daNote.frameWidth > 0 ? daNote.frameWidth : 160) * noteData.scaleX;
 		var noteOffsetX:Float = (Std.isOfType(daNote, Note)) ? ModchartUtil.getNoteOffsetX(cast daNote, renderer.instance) : 0;
 
 		if (changeX) {
 			_vec3b.setTo(
-				noteData.x + (daNote.width / 2) + noteOffsetX,
+				noteData.x + (noteW / 2) + noteOffsetX,
 				noteData.y + (daNote.height / 2),
 				noteData.z * 0.001
 			);
 			thisNotePos = ModchartUtil.calculatePerspective(
 				_vec3b,
 				ModchartUtil.defaultFOV * (Math.PI / 180),
-				-(daNote.width / 2),
+				-(noteW / 2),
 				-(daNote.height / 2)
 			);
 		} else {
-			_vec3.setTo(noteData.x, noteData.y, 0);
+			_vec3.setTo(noteData.x + noteOffsetX, noteData.y, 0);
 			thisNotePos = _vec3;
 		}
 

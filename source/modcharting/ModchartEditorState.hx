@@ -96,11 +96,9 @@ class ModchartEditorEvent extends FlxSprite {
 		var t:Dynamic = data[ModchartFile.EVENT_DATA][ModchartFile.EVENT_TIME];
 		if (Std.isOfType(t, String)) {
 			var tStr:String = t;
-			if (tStr.indexOf(",") != -1) {
-				var parts = tStr.split(",");
-				return Std.parseFloat(parts[0].trim());
-			}
-			return Std.parseFloat(tStr);
+			var parts = ModchartUtil.splitArgs(tStr);
+			var v = ModchartUtil.resolveNumeric(parts.length > 0 ? parts[0] : tStr);
+			return Math.isNaN(v) ? 0 : v;
 		}
 		return t;
 	}
@@ -263,6 +261,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		BrakeModifier,
 		BoomerangModifier,
 		WaveingModifier,
+		SustainTrapezoidModifier,
 		TwirlModifier,
 		RollModifier,
 		// Stealth Modifiers
@@ -435,6 +434,13 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 	public var textBlockers:Array<FlxInputText> = [];
 
+	public var maniaChanges:Array<{time:Float, playerKeys:Int, opponentKeys:Int}> = [];
+	public var initialPlayerKeyCount:Int = 4;
+	public var initialOpponentKeyCount:Int = 4;
+	public var currentEditorPlayerKeyCount:Int = 4;
+	public var currentEditorOpponentKeyCount:Int = 4;
+	public var lanePathGroup:flixel.group.FlxGroup;
+
 	var scrollBlockers:Array<FlxUIDropDownMenu> = [];
 
 	public var playbackSpeed:Float = 1;
@@ -569,6 +575,39 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 		#if LEATHER
 		var SONG = PlayState.SONG;
+		initialPlayerKeyCount = SONG != null && SONG.playerKeyCount != null && SONG.playerKeyCount > 0 ? SONG.playerKeyCount : 4;
+		initialOpponentKeyCount = SONG != null && SONG.keyCount != null && SONG.keyCount > 0 ? SONG.keyCount : 4;
+		currentEditorPlayerKeyCount = initialPlayerKeyCount;
+		currentEditorOpponentKeyCount = initialOpponentKeyCount;
+
+		maniaChanges = [];
+		var chartEvents:Array<Dynamic> = [];
+		if (SONG != null && SONG.events != null) {
+			for (e in SONG.events) chartEvents.push(e);
+		}
+		var songEventsPath:String = Paths.songEvents(SONG.song.toLowerCase(), PlayState.storyDifficultyStr.toLowerCase());
+		if (Assets.exists(songEventsPath)) {
+			try {
+				var parsed = SongLoader.parseLegacy(Json.parse(Assets.getText(songEventsPath)), SONG.song).events;
+				for (e in parsed) chartEvents.push(e);
+			} catch (err:Dynamic) {}
+		}
+		for (event in chartEvents) {
+			if (event != null && event.length >= 3) {
+				var evName = Std.string(event[0]).toLowerCase();
+				if (evName == "change keycount" || evName == "change mania" || evName == "change keys") {
+					var time:Float = Std.parseFloat(Std.string(event[1]));
+					var pkStr:String = StringTools.trim(Std.string(event[2]));
+					var kStr:String = (event.length > 3) ? StringTools.trim(Std.string(event[3])) : "";
+					var pKeys:Null<Int> = Std.parseInt(pkStr);
+					var oKeys:Null<Int> = Std.parseInt(kStr);
+					if (pKeys == null || pKeys < 1) pKeys = (oKeys != null && oKeys >= 1) ? oKeys : initialPlayerKeyCount;
+					if (oKeys == null || oKeys < 1) oKeys = pKeys;
+					maniaChanges.push({time: time, playerKeys: pKeys, opponentKeys: oKeys});
+				}
+			}
+		}
+		maniaChanges.sort((a, b) -> Std.int(a.time - b.time));
 		MusicBeatState.windowNameSuffix = " - " + (SONG?.song ?? "Unknown Song") + " (Modchart Editor)";
 		if (Std.string(SONG.ui_Skin) == "null")
 			SONG.ui_Skin = SONG.stage == "school" || SONG.stage == "school-mad" || SONG.stage == "evil-school" ? "pixel" : "default";
@@ -634,6 +673,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		playfieldRenderer.inEditor = true;
 		playfieldRenderer.editorPaused = true;
 		
+		lanePathGroup = new flixel.group.FlxGroup();
+		add(lanePathGroup);
 		regenerateLanePaths();
 		add(playfieldRenderer);
 
@@ -683,10 +724,14 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			generateStaticArrows(50, false);
 			generateStaticArrows(0.5, true);
 		} else {
-			generateStaticArrows(0, true);
-			generateStaticArrows(1);
+			generateStaticArrows(0, false);
+			generateStaticArrows(1, true);
 		}
 		NoteMovement.getDefaultStrumPosEditor(this);
+		if (playfieldRenderer != null) {
+			playfieldRenderer.modifierTable.reconstructTable();
+			regenerateLanePaths();
+		}
 
 		// gridGap = FlxMath.remapToRange(Conductor.stepCrochet, 0, Conductor.stepCrochet, 0, gridSize); //idk why i even thought this was how i do it
 		// trace(gridGap);
@@ -757,8 +802,16 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		if (autoSaveTimer != null) autoSaveTimer.cancel();
 		clearCaches();
 		#if LEATHER
-		if (camStagePreview != null) { FlxG.cameras.remove(camStagePreview); camStagePreview = null; }
+		if (camStagePreview != null) {
+			if (FlxG.cameras.list != null && FlxG.cameras.list.contains(camStagePreview))
+				FlxG.cameras.remove(camStagePreview);
+			camStagePreview = null;
+		}
 		destroyStagePreview();
+		if (PlayState.SONG != null) {
+			PlayState.SONG.keyCount = initialOpponentKeyCount;
+			PlayState.SONG.playerKeyCount = initialPlayerKeyCount;
+		}
 		#end
 		super.destroy();
 	}
@@ -767,8 +820,16 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		if (autoSaveTimer != null) autoSaveTimer.cancel();
 		clearCaches();
 		#if LEATHER
-		if (camStagePreview != null) { FlxG.cameras.remove(camStagePreview); camStagePreview = null; }
+		if (camStagePreview != null) {
+			if (FlxG.cameras.list != null && FlxG.cameras.list.contains(camStagePreview))
+				FlxG.cameras.remove(camStagePreview);
+			camStagePreview = null;
+		}
 		destroyStagePreview();
+		if (PlayState.SONG != null) {
+			PlayState.SONG.keyCount = initialOpponentKeyCount;
+			PlayState.SONG.playerKeyCount = initialPlayerKeyCount;
+		}
 		#end
 		super.destroy();
 	}
@@ -783,6 +844,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		editorPosition = value;
 		Conductor.songPosition = value;
 		#if LEATHER
+		updateKeyCountForTime(value);
 		previewSung.clear();
 		#end
 		var audioTime:Float = value < 0 ? 0 : value;
@@ -868,6 +930,9 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		if (inst.playing || (preRolling && !playfieldRenderer.editorPaused) || (!playfieldRenderer.editorPaused && editorPosition >= 0)) {
 			editorPosition += FlxG.elapsed * 1000.0 * inst.pitch;
 			Conductor.songPosition = editorPosition;
+			#if LEATHER
+			updateKeyCountForTime(editorPosition);
+			#end
 			if (songSlider != null)
 				songSlider.value = editorPosition;
 		}
@@ -1228,6 +1293,12 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				#elseif (PSYCH && !(PSYCHVERSION >= "0.7"))
 				StageData.loadDirectory(PlayState.SONG);
 				#end
+				#if LEATHER
+				if (PlayState.SONG != null) {
+					PlayState.SONG.keyCount = initialOpponentKeyCount;
+					PlayState.SONG.playerKeyCount = initialPlayerKeyCount;
+				}
+				#end
 				PlayState.modchartingMode = false;
 				PlayState.chartingMode = false;
 				LoadingState.loadAndSwitchState(() -> new PlayState());
@@ -1291,7 +1362,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 
 	function regenerateLanePaths() {
 		for (path in playfieldRenderer.lanePaths) {
-			remove(path);
+			if (lanePathGroup != null)
+				lanePathGroup.remove(path, true);
+			else
+				remove(path);
 			path.destroy();
 		}
 		playfieldRenderer.lanePaths = [];
@@ -1299,9 +1373,13 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			for (lane in 0...NoteMovement.totalKeyCount) {
 				var path = new LanePathRenderer(playfieldRenderer, lane, pf);
 				path.cameras = [camNotes];
-				path.visible = true;
+				path.visible = check_lanePaths != null ? check_lanePaths.checked : false;
+				path.active = path.visible;
 				playfieldRenderer.lanePaths.push(path);
-				add(path);
+				if (lanePathGroup != null)
+					lanePathGroup.add(path);
+				else
+					add(path);
 			}
 		}
 	}
@@ -1517,10 +1595,18 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			for (songNotes in section.sectionNotes) {
 				var daStrumTime:Float = songNotes[0];
 				#if LEATHER
+				var curOppKeys:Int = initialOpponentKeyCount;
+				var curPlrKeys:Int = initialPlayerKeyCount;
+				for (mc in maniaChanges) {
+					if (daStrumTime >= mc.time) {
+						curOppKeys = mc.opponentKeys;
+						curPlrKeys = mc.playerKeys;
+					}
+				}
 				var gottaHitNote:Bool = section.mustHitSection;
-				if (songNotes[1] >= (!gottaHitNote ? PlayState.SONG.keyCount : PlayState.SONG.playerKeyCount))
+				if (songNotes[1] >= (!gottaHitNote ? curOppKeys : curPlrKeys))
 					gottaHitNote = !section.mustHitSection;
-				var daNoteData:Int = Std.int(songNotes[1] % (!gottaHitNote ? PlayState.SONG.keyCount : PlayState.SONG.playerKeyCount));
+				var daNoteData:Int = Std.int(songNotes[1] % (!gottaHitNote ? curOppKeys : curPlrKeys));
 				#else
 				var daNoteData:Int = Std.int(songNotes[1] % 4);
 				var gottaHitNote:Bool = section.mustHitSection;
@@ -1548,7 +1634,8 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 					swagNote.noteType = editors.ChartingState.noteTypeList[songNotes[3]]; // Backward compatibility + compatibility with Week 7 charts
 				#end
 				#elseif LEATHER
-				var swagNote:Note = new Note(daStrumTime, daNoteData, oldNote, false, 0, songNotes[4] ?? "default", null, [0], gottaHitNote);
+				var targetKeyCount:Int = gottaHitNote ? curPlrKeys : curOppKeys;
+				var swagNote:Note = new Note(daStrumTime, daNoteData, oldNote, false, 0, songNotes[4] ?? "default", null, [0], gottaHitNote, false, -1, targetKeyCount);
 				swagNote.sustainLength = songNotes[2];
 				#end
 
@@ -1575,7 +1662,10 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 						songNotes[4] ?? "default",
 						null,
 						[0],
-						gottaHitNote
+						gottaHitNote,
+						false,
+						-1,
+						targetKeyCount
 					);
 					sustainNote.sustainMs = susSegEnd - susSegStart;
 					sustainNote.mustPress = gottaHitNote;
@@ -1673,9 +1763,55 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			daBeats += 1;
 		}
 
+		#if LEATHER
+		if (PlayState.SONG != null) {
+			PlayState.SONG.keyCount = initialOpponentKeyCount;
+			PlayState.SONG.playerKeyCount = initialPlayerKeyCount;
+		}
+		#end
+
 		unspawnNotes.sort(sortByTime);
 		loadedNotes = unspawnNotes.copy();
 		generatedMusic = true;
+	}
+
+	public function updateKeyCountForTime(time:Float):Void {
+		#if LEATHER
+		var targetOpp:Int = initialOpponentKeyCount;
+		var targetPlr:Int = initialPlayerKeyCount;
+		for (mc in maniaChanges) {
+			if (time >= mc.time) {
+				targetOpp = mc.opponentKeys;
+				targetPlr = mc.playerKeys;
+			}
+		}
+
+		if (targetOpp != currentEditorOpponentKeyCount || targetPlr != currentEditorPlayerKeyCount) {
+			currentEditorOpponentKeyCount = targetOpp;
+			currentEditorPlayerKeyCount = targetPlr;
+			PlayState.SONG.keyCount = targetOpp;
+			PlayState.SONG.playerKeyCount = targetPlr;
+
+			playerStrums.clear();
+			opponentStrums.clear();
+			strumLineNotes.clear();
+
+			if (check_middlescroll != null && check_middlescroll.checked) {
+				generateStaticArrows(50, false);
+				generateStaticArrows(0.5, true);
+			} else {
+				generateStaticArrows(0, false);
+				generateStaticArrows(1, true);
+			}
+
+			NoteMovement.getDefaultStrumPosEditor(this);
+			if (playfieldRenderer != null) {
+				playfieldRenderer.modifierTable.reconstructTable();
+				regenerateLanePaths();
+			}
+			dirtyUpdateNotes = true;
+		}
+		#end
 	}
 
 	public inline function sortByTime(Obj1:Dynamic, Obj2:Dynamic):Int {
@@ -1686,7 +1822,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		var usedKeyCount:Int = isPlayer ? PlayState.SONG.playerKeyCount : PlayState.SONG.keyCount;
 
 		for (i in 0...usedKeyCount) {
-			var babyArrow:StrumNote = new StrumNote(0, strumLine.y, i, null, null, null, usedKeyCount, pos);
+			var babyArrow:StrumNote = new StrumNote(0, strumLine.y, i, PlayState.SONG.ui_Skin, ui_settings, mania_size, usedKeyCount, pos);
 			babyArrow.scrollFactor.set();
 			babyArrow.x += (babyArrow.width
 				+ (2 + Std.parseFloat(mania_gap[usedKeyCount - 1]))) * Math.abs(i)
@@ -1997,6 +2133,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			'BrakeModifier' => "Modifier used to make notes come slower to target",
 			'BoomerangModifier' => "Modifier used to make notes come in reverse to target",
 			'WaveingModifier' => "Modifier used to make notes come faster and slower to target",
+			'SustainTrapezoidModifier' => "Modifier used to shape sustain note frames into an isosceles trapezoid",
 			'JumpModifier' => "Modifier used to make notes and target jump",
 			'WaveXModifier' => "Modifier similar to drunkX but this one will simulate a true wave in X (don't affect the notes)",
 			'WaveYModifier' => "Modifier similar to drunkY but this one will simulate a true wave in Y (don't affect the notes)",
@@ -2121,7 +2258,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		var data = getCurrentEventInData();
 		if (data != null) {
 			var dataStr:String = findCorrectModData(data);
-			var dataSplit = dataStr.split(',');
+			var dataSplit = ModchartUtil.splitArgs(dataStr, false);
 			// the way the data works is it goes "value,mod,value,mod,....." and goes on forever, so it has to deconstruct and reconstruct to edit it and shit
 
 			dataSplit[(getEventModIndex() * 2) + (isMod ? 1 : 0)] = shitToUpdate;
@@ -2135,7 +2272,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		if (data != null) {
 			var dataStr:String = findCorrectModData(data);
 			if (dataStr != null) {
-				var dataSplit = dataStr.split(',');
+				var dataSplit = ModchartUtil.splitArgs(dataStr, false);
 				var val = dataSplit[(getEventModIndex() * 2) + (isMod ? 1 : 0)];
 				if (val != null) return val;
 			}
@@ -2169,7 +2306,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 			if (selectedEventDataStepper.max > 0) // dont remove if theres only 1
 			{
 				var dataStr:String = findCorrectModData(data);
-				var dataSplit = dataStr.split(',');
+				var dataSplit = ModchartUtil.splitArgs(dataStr, false);
 				dataSplit.resize(dataSplit.length - 2); // remove last 2 things
 				dataStr = stringifyEventModData(dataSplit);
 				data = setCorrectModData(data, dataStr);
@@ -2447,7 +2584,7 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 		var data = getCurrentEventInData();
 		if (data != null) {
 			var dataStr:String = findCorrectModData(data);
-			var dataSplit = dataStr.split(',');
+			var dataSplit = ModchartUtil.splitArgs(dataStr, false);
 			return Math.floor((dataSplit.length / 2) - 1);
 		}
 		return 0;
@@ -2665,10 +2802,14 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				generateStaticArrows(50, false);
 				generateStaticArrows(0.5, true);
 			} else {
-				generateStaticArrows(0, true);
-				generateStaticArrows(1);
+				generateStaticArrows(0, false);
+				generateStaticArrows(1, true);
 			}
 			NoteMovement.getDefaultStrumPosEditor(this);
+			if (playfieldRenderer != null) {
+				playfieldRenderer.modifierTable.reconstructTable();
+				regenerateLanePaths();
+			}
 		};
 
 		check_downscroll = new FlxUICheckBox(check_mute_vocals.x, check_middlescroll.y, null, null, "Toggle Downscroll (In Editor)", 100);
@@ -2701,10 +2842,14 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 				generateStaticArrows(50, false);
 				generateStaticArrows(0.5, true);
 			} else {
-				generateStaticArrows(0, true);
-				generateStaticArrows(1);
+				generateStaticArrows(0, false);
+				generateStaticArrows(1, true);
 			}
 			NoteMovement.getDefaultStrumPosEditor(this);
+			if (playfieldRenderer != null) {
+				playfieldRenderer.modifierTable.reconstructTable();
+				regenerateLanePaths();
+			}
 		};
 
 		check_lanePaths = new FlxUICheckBox(
@@ -3058,7 +3203,13 @@ class ModchartEditorState extends #if (PSYCH && PSYCHVERSION >= "0.7") backend.M
 	#end
 
 	public function addUI(tab_group:FlxUI, name:String, ui:FlxSprite, title:String = "", body:String = "", anchor:Anchor = null) {
-		tooltips.add(ui, {
+		var targetUI:FlxSprite = ui;
+		if (Std.isOfType(ui, FlxUIDropDownMenu)) {
+			var drop:FlxUIDropDownMenu = cast ui;
+			if (drop.header != null && drop.header.button != null)
+				targetUI = drop.header.button;
+		}
+		tooltips.add(targetUI, {
 			title: title,
 			body: body,
 			anchor: anchor,

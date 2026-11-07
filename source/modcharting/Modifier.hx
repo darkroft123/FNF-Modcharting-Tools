@@ -1122,15 +1122,81 @@ class BoomerangModifier extends Modifier {
 }
 
 class WaveingModifier extends Modifier {
-	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
-		var distance = curPos * 0.01;
-		noteData.y += (Math.sin(distance * 0.3) * 50) * currentValue; // don't mind me i just figured it out
-	}
-
-	override function noteDistMath(noteDist:Float, lane:Int, curPos:Float, pf:Int) {
-		return noteDist * (0.4 + ((Math.sin(curPos * 0.007) * 0.1) * currentValue));
+	override function curPosMath(lane:Int, curPos:Float, pf:Int):Float {
+		var maxAmp:Float = 120.0;
+		var amp:Float = flixel.math.FlxMath.bound(60.0 * currentValue, -maxAmp, maxAmp);
+		return curPos + (Math.sin(curPos * 0.005) * amp);
 	}
 }
+
+class SustainTrapezoidModifier extends Modifier {
+	override function setupSubValues() {
+		baseValue = 0.0;
+		currentValue = 1.0;
+		subValues.set('invert', new ModifierSubValue(0.0));
+		subValues.set('taper', new ModifierSubValue(0.4));
+	}
+
+	override public function getNotePath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		if (currentValue != baseValue || hasActiveSubValues()) {
+			noteMath(noteData, lane, curPos, pf);
+		}
+	}
+
+	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {
+		if (currentValue == 0.0 && !hasActiveSubValues()) return;
+
+		var daNote = (renderer != null && renderer.notes != null && noteData.index >= 0 && noteData.index < renderer.notes.members.length) ? renderer.notes.members[noteData.index] : null;
+		if (daNote == null || !daNote.isSustainNote) return;
+
+		var animName:String = (daNote.animation != null && daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
+		var isHoldEnd:Bool = animName.endsWith("end");
+
+		var pieceDuration:Float = SustainRenderer.getNoteSustainDuration(daNote);
+		if (isHoldEnd) {
+			var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
+			var capHeight:Float = daNote.frameHeight * baseScale;
+			var speedFactor:Float = daNote.speed * 0.45;
+			var capDuration:Float = (speedFactor > 0.001) ? (capHeight / speedFactor) : pieceDuration;
+			if (capDuration < pieceDuration)
+				pieceDuration = capDuration;
+		}
+
+		var songSpeed:Float = daNote.speed;
+		var totalDelta:Float = pieceDuration * songSpeed;
+		if (totalDelta <= 0.001) return;
+
+		var baseCurPos:Float = renderer.getNoteCurPos(noteData.index, 0);
+		if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && baseCurPos >= 0)
+			baseCurPos = 0;
+
+		var deltaCurPos:Float = baseCurPos - curPos;
+		var progress:Float = flixel.math.FlxMath.bound(deltaCurPos / totalDelta, 0.0, 1.0);
+
+		var taperRatio:Float = subValues.exists('taper') ? subValues.get('taper').value : 0.4;
+		var invertTaper:Bool = subValues.exists('invert') ? (subValues.get('invert').value > 0.5) : false;
+
+		var isDown:Bool = isDownscroll();
+		var topIsNarrow:Bool = !invertTaper;
+		var baseIsNarrow:Bool = isDown ? !topIsNarrow : topIsNarrow;
+
+		var narrowScale:Float = flixel.math.FlxMath.lerp(1.0, taperRatio, Math.abs(currentValue));
+		var wideScale:Float = 1.0;
+
+		var startScale:Float = baseIsNarrow ? narrowScale : wideScale;
+		var endScale:Float = baseIsNarrow ? wideScale : narrowScale;
+
+		var targetScale:Float = flixel.math.FlxMath.lerp(startScale, endScale, progress);
+
+		var originalScale:Float = noteData.scaleX;
+		noteData.scaleX *= targetScale;
+
+		var noteW:Float = (daNote.frameWidth > 0 ? daNote.frameWidth : 160) * originalScale;
+		var widthDiff:Float = noteW * (1.0 - targetScale);
+		noteData.x += widthDiff * 0.5;
+	}
+}
+
 
 class JumpModifier extends Modifier // custom thingy i made
 {

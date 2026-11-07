@@ -103,6 +103,7 @@ class NoteMovement
         #if LEATHER
         leatherEngineOffsetStuff.clear();
         #end
+        totalKeyCount = keyCount + playerKeyCount;
     }
     public static function setNotePath(daNote:Note, lane:Int, scrollSpeed:Float, curPos:Float, noteDist:Float, incomingAngleX:Float, incomingAngleY:Float)
     {

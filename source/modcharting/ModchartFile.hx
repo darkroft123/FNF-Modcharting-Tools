@@ -378,15 +378,9 @@ class ModchartFile {
 
 		if (Std.isOfType(rawTime, String)) {
 			var timeStr:String = rawTime;
-			if (timeStr.indexOf(",") != -1) {
-				var timeParts = timeStr.split(",");
-				for (t in timeParts) {
-					var parsed = Std.parseFloat(t.trim());
-					if (!Math.isNaN(parsed))
-						times.push(parsed + beatOffset);
-				}
-			} else {
-				var parsed = Std.parseFloat(timeStr);
+			var timeParts = ModchartUtil.splitArgs(timeStr);
+			for (t in timeParts) {
+				var parsed = ModchartUtil.resolveNumeric(t, beatOffset);
 				if (!Math.isNaN(parsed))
 					times.push(parsed + beatOffset);
 			}
@@ -401,20 +395,20 @@ class ModchartFile {
 		switch (i[EVENT_TYPE]) {
 			case "ease":
 				var fullArgsStr:String = i[EVENT_DATA][EVENT_EASEDATA];
-				var args = fullArgsStr.trim().replace(' ', '').split(',');
+				var args = ModchartUtil.splitArgs(fullArgsStr);
 				var pairCount = Math.floor(args.length / 2);
 
 				var easeTimeRaw:String = Std.string(i[EVENT_DATA][EVENT_EASETIME]);
-				var easeTimeParts = easeTimeRaw.trim().replace(' ', '').split(',');
+				var easeTimeParts = ModchartUtil.splitArgs(easeTimeRaw);
 				var easeTimes:Array<Float> = [];
 				for (t in easeTimeParts) {
-					var parsed = Std.parseFloat(t);
+					var parsed = ModchartUtil.resolveNumeric(t, times[0]);
 					if (!Math.isNaN(parsed)) easeTimes.push(parsed);
 				}
 				if (easeTimes.length == 0) easeTimes.push(1);
 
 				var easeRaw:String = Std.string(i[EVENT_DATA][EVENT_EASE]);
-				var eases = easeRaw.trim().replace(' ', '').split(',');
+				var eases = ModchartUtil.splitArgs(easeRaw);
 				if (eases.length == 0) eases.push("linear");
 
 				for (p in 0...pairCount) {
@@ -427,7 +421,7 @@ class ModchartFile {
 				}
 			case "set":
 				var fullArgsStr:String = i[EVENT_DATA][EVENT_SETDATA];
-				var args = fullArgsStr.trim().replace(' ', '').split(',');
+				var args = ModchartUtil.splitArgs(fullArgsStr);
 				var pairCount = Math.floor(args.length / 2);
 				for (p in 0...pairCount) {
 					var pairTime = times.length > p ? times[p] : times[times.length - 1];

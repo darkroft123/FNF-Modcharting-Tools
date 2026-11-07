@@ -416,14 +416,14 @@ class ModchartFuncs
                     instance.playfieldRenderer.modchart.data.events.push(["set", [beat, argsAsString]]);
                 }
         }
-        var args = argsAsString.trim().replace(' ', '').split(',');
+        var args = ModchartUtil.splitArgs(argsAsString);
 
         instance.playfieldRenderer.eventManager.addEvent(beat, function(arguments:Array<String>) {
             for (i in 0...Math.floor(arguments.length/2))
             {
-                var name:String = Std.string(arguments[1 + (i*2)]);
-                var rawValue:String = Std.string(arguments[0 + (i*2)]);
-                var value:Float = Std.parseFloat(rawValue);
+                var name:String = Std.string(arguments[1 + (i*2)]).trim();
+                var rawValue:String = Std.string(arguments[0 + (i*2)]).trim();
+                var value:Float = ModchartUtil.resolveNumeric(rawValue, beat);
                 // alias: the engine registers the camera modifier as "cameramodifier"
                 if (name == 'camera' && !instance.playfieldRenderer.modifierTable.modifiers.exists(name))
                     name = 'cameramodifier';
@@ -482,7 +482,7 @@ class ModchartFuncs
         if(Math.isNaN(time))
             time = 1;
 
-        var args = argsAsString.trim().replace(' ', '').split(',');
+        var args = ModchartUtil.splitArgs(argsAsString);
 
         var func = function(arguments:Array<String>) {
             var durationInSeconds:Float = (ModchartUtil.getTimeFromBeat(beat + time) - ModchartUtil.getTimeFromBeat(beat)) * 0.001;
@@ -493,11 +493,10 @@ class ModchartFuncs
             
             for (i in 0...Math.floor(arguments.length/2))
             {
-                var name:String = Std.string(arguments[1 + (i*2)]);
-                var rawValue:String = Std.string(arguments[0 + (i*2)]);
-                var value:Float = Std.parseFloat(rawValue);
-                if(Math.isNaN(value))
-                    value = 0;
+                var name:String = Std.string(arguments[1 + (i*2)]).trim();
+                var rawValue:String = Std.string(arguments[0 + (i*2)]).trim();
+                var parsedValue:Float = ModchartUtil.resolveNumeric(rawValue, beat);
+                var value:Float = Math.isNaN(parsedValue) ? 0 : parsedValue;
                 var subModCheck = name.split(':');
                 if (subModCheck.length > 1)
                 {
@@ -511,7 +510,7 @@ class ModchartFuncs
                         var mod = instance.playfieldRenderer.modifierTable.modifiers.get(modName);
                         subModName = mod.normalizeSubModName(subModName);
                         subVal = mod.subValues.get(subModName);
-                        if (subVal != null && Math.isNaN(Std.parseFloat(rawValue)))
+                        if (subVal != null && Math.isNaN(parsedValue))
                         {
                             // non-numeric: a named/id subvalue (e.g. camera:layer = "dad")
                             subVal.name = rawValue;

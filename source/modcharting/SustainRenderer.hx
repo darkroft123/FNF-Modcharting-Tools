@@ -51,21 +51,23 @@ class SustainRenderer {
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isHoldEnd = animName.endsWith("end");
 
+		var noteW:Float = (daNote.frameWidth > 0 ? daNote.frameWidth : 160) * noteData.scaleX;
+		var noteOffsetX:Float = ModchartUtil.getNoteOffsetX(daNote, renderer.instance);
 		var thisNotePos:Vector3D;
 		if (changeX) {
 			_vec3.setTo(
-				noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, renderer.instance),
+				noteData.x + (noteW / 2) + noteOffsetX,
 				noteData.y + (daNote.height / 2),
 				noteData.z * 0.001
 			);
 			thisNotePos = ModchartUtil.calculatePerspective(
 				_vec3,
 				ModchartUtil.defaultFOV * (Math.PI / 180),
-				-(daNote.width / 2),
+				-(noteW / 2),
 				-(daNote.height / 2)
 			);
 		} else {
-			_vec3.setTo(noteData.x + ModchartUtil.getNoteOffsetX(daNote, renderer.instance), noteData.y, 0);
+			_vec3.setTo(noteData.x + noteOffsetX, noteData.y, 0);
 			thisNotePos = _vec3;
 		}
 
@@ -154,16 +156,18 @@ class SustainRenderer {
 
 		var lane = noteData.lane;
 		var yOffsetThingy = (NoteMovement.arrowSizes[lane] / 2);
+		var noteW:Float = (daNote.frameWidth > 0 ? daNote.frameWidth : 160) * noteData.scaleX;
+		var noteOffsetX:Float = ModchartUtil.getNoteOffsetX(daNote, renderer.instance);
 
 		_vec3.setTo(
-			noteData.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, renderer.instance),
+			noteData.x + (noteW / 2) + noteOffsetX,
 			noteData.y + (NoteMovement.arrowSizes[noteData.lane] / 2),
 			noteData.z * 0.001
 		);
 		var thisNotePos = ModchartUtil.calculatePerspective(
 			_vec3,
 			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(daNote.width / 2),
+			-(noteW / 2),
 			yOffsetThingy - (NoteMovement.arrowSizes[noteData.lane] / 2)
 		);
 
@@ -189,6 +193,23 @@ class SustainRenderer {
 		var flipGraphic = (noteData.noteDist > 0);
 		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
 		var reverseClip = (fixedAngY > 90 && fixedAngY < 270);
+
+		if (isHoldEnd) {
+			var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
+			var capHeight:Float = daNote.frameHeight * baseScale;
+			var minHeight:Float = Math.max(8.0, capHeight * 0.25);
+			if (!flipGraphic) {
+				if (nextNotePos.y < thisNotePos.y + minHeight)
+					nextNotePos.y = thisNotePos.y + minHeight;
+				if (nextHalfNotePos.y < thisNotePos.y + (minHeight * 0.5))
+					nextHalfNotePos.y = thisNotePos.y + (minHeight * 0.5);
+			} else {
+				if (nextNotePos.y > thisNotePos.y - minHeight)
+					nextNotePos.y = thisNotePos.y - minHeight;
+				if (nextHalfNotePos.y > thisNotePos.y - (minHeight * 0.5))
+					nextHalfNotePos.y = thisNotePos.y - (minHeight * 0.5);
+			}
+		}
 
 		try {
 			var savedMeshShader = daNote.mesh.shader;
@@ -229,16 +250,17 @@ class SustainRenderer {
 		renderer.modifierTable.applyNoteMods(result, lane, curPos, pf);
 		result.finalizeColorFill();
 
+		var noteW:Float = (daNote.frameWidth > 0 ? daNote.frameWidth : 160) * result.scaleX;
 		var arrowSize = NoteMovement.arrowSizes[lane] / 2;
 		_vec3b.setTo(
-			result.x + (daNote.width / 2) + ModchartUtil.getNoteOffsetX(daNote, renderer.instance),
+			result.x + (noteW / 2) + ModchartUtil.getNoteOffsetX(daNote, renderer.instance),
 			result.y + (NoteMovement.arrowSizes[result.lane] / 2),
 			result.z * 0.001
 		);
 		var finalPos = ModchartUtil.calculatePerspective(
 			_vec3b,
 			ModchartUtil.defaultFOV * (Math.PI / 180),
-			-(daNote.width / 2),
+			-(noteW / 2),
 			0
 		);
 		result.x = finalPos.x;
