@@ -1206,6 +1206,7 @@ class SustainConnectModifier extends Modifier {
 	static var _outgoingLanes:Map<String, Int> = new Map<String, Int>();
 	static var _outgoingTargetTimes:Map<String, Float> = new Map<String, Float>();
 	static var _incomingHeads:Map<String, Bool> = new Map<String, Bool>();
+	static var _incomingSourceLanes:Map<String, Int> = new Map<String, Int>();
 	static var _incomingParents:Map<String, Int> = new Map<String, Int>();
 
 	public function new(tag:String, ?type:ModifierType = ALL, ?playfield:Int = -1) {
@@ -1227,11 +1228,28 @@ class SustainConnectModifier extends Modifier {
 		return Math.abs(currentValue) > 0.001;
 	}
 
+	public static inline function getConnectValue():Float {
+		return (currentInstance != null) ? currentInstance.currentValue : 0.0;
+	}
+
 	public static inline function checkRebuild(r:PlayfieldRenderer):Void {
 		var curTicks:Int = (flixel.FlxG.game != null) ? flixel.FlxG.game.ticks : 0;
 		var curSongPos:Float = game.Conductor.songPosition;
+		if (curSongPos < _lastSongPos - 500) {
+			clearConnections();
+		}
 		if (r != null && (_lastFrame != curTicks || Math.abs(_lastSongPos - curSongPos) > 1.0))
 			rebuildFrameConnections(r);
+	}
+
+	public static function clearConnections():Void {
+		_outgoingLanes.clear();
+		_outgoingTargetTimes.clear();
+		_incomingHeads.clear();
+		_incomingSourceLanes.clear();
+		_incomingParents.clear();
+		_lastSongPos = -999999;
+		_lastFrame = -1;
 	}
 
 	override public function getStrumPath(noteData:NotePositionData, lane:Int, pf:Int) {
@@ -1246,7 +1264,7 @@ class SustainConnectModifier extends Modifier {
 	}
 
 	public static inline function noteKey(n:Dynamic):String {
-		return (n == null) ? "" : (Math.round(n.strumTime) + "_" + getNoteLane(n));
+		return (n == null) ? "" : (Math.round(n.strumTime) + "_" + getNoteLane(n) + "_" + (n.isSustainNote == true ? "s" : "n"));
 	}
 
 	public static inline function getParentNote(n:Dynamic):Dynamic {
@@ -1294,10 +1312,27 @@ class SustainConnectModifier extends Modifier {
 		return false;
 	}
 
+	public static function getFirstSustainChild(head:Dynamic, allNotes:Array<Dynamic>):Dynamic {
+		if (head == null) return null;
+		if (head.sustains != null && (cast head.sustains:Array<Dynamic>).length > 0)
+			return (cast head.sustains:Array<Dynamic>)[0];
+		for (n in allNotes) {
+			if (n != null && n.isSustainNote == true && (n.prevNote == head || getParentNote(n) == head))
+				return n;
+		}
+		return null;
+	}
+
 	public static function isOutgoingConnected(daNote:Dynamic):Bool {
-		if (daNote == null || currentInstance == null || Math.abs(currentInstance.currentValue) <= 0.001) return false;
-		checkRebuild(currentInstance.renderer);
+		if (daNote == null || Math.abs(getConnectValue()) <= 0.001) return false;
+		if (currentInstance != null) checkRebuild(currentInstance.renderer);
 		return _outgoingLanes.exists(noteKey(daNote));
+	}
+
+	public static function getOutgoingLane(daNote:Dynamic):Int {
+		if (daNote == null) return -1;
+		var key = noteKey(daNote);
+		return _outgoingLanes.exists(key) ? _outgoingLanes.get(key) : -1;
 	}
 
 	public static function getOutgoingTargetTime(daNote:Dynamic):Float {
@@ -1307,20 +1342,28 @@ class SustainConnectModifier extends Modifier {
 	}
 
 	public static function isIncomingConnected(daNote:Dynamic):Bool {
-		if (daNote == null || currentInstance == null || Math.abs(currentInstance.currentValue) <= 0.001) return false;
+		if (daNote == null || Math.abs(getConnectValue()) <= 0.001) return false;
 		if (!daNote.isSustainNote || !isFirstSustainSlice(daNote)) return false;
+		if (currentInstance != null) checkRebuild(currentInstance.renderer);
+		var k = noteKey(daNote);
+		if (_incomingSourceLanes.exists(k)) return true;
 		var p = getParentNote(daNote);
-		var pKey = (p != null) ? noteKey(p) : "";
-		return _incomingParents.exists(pKey);
+		if (p != null && _incomingParents.exists(noteKey(p))) return true;
+		return false;
+	}
+
+	public static function getIncomingSourceLane(daNote:Dynamic):Int {
+		if (daNote == null) return -1;
+		var k = noteKey(daNote);
+		if (_incomingSourceLanes.exists(k)) return _incomingSourceLanes.get(k);
+		var p = getParentNote(daNote);
+		if (p != null && _incomingParents.exists(noteKey(p))) return _incomingParents.get(noteKey(p));
+		return -1;
 	}
 
 	public static function rebuildFrameConnections(r:PlayfieldRenderer):Void {
 		_lastFrame = (flixel.FlxG.game != null) ? flixel.FlxG.game.ticks : 0;
 		_lastSongPos = game.Conductor.songPosition;
-		_outgoingLanes.clear();
-		_outgoingTargetTimes.clear();
-		_incomingHeads.clear();
-		_incomingParents.clear();
 
 		if (r == null) return;
 
@@ -1373,12 +1416,18 @@ class SustainConnectModifier extends Modifier {
 		var pairs:Array<{outNote:Dynamic, inHead:Dynamic, laneDist:Int, timeDiff:Float}> = [];
 
 		for (outNote in outTails) {
+			var outK = noteKey(outNote);
+			if (_outgoingLanes.exists(outK)) continue;
+
 			var laneA:Int = getNoteLane(outNote);
 			var isPlayerA:Bool = (laneA >= keyCount);
 			var pA = getParentNote(outNote);
-			var holdEnd:Float = (pA != null && pA.sustainLength > 0) ? (pA.strumTime + pA.sustainLength) : outNote.strumTime;
+			var holdEnd:Float = (pA != null && pA.sustainLength > 0) ? (pA.strumTime + pA.sustainLength) : (outNote.strumTime + SustainRenderer.getNoteSustainDuration(outNote));
 
 			for (inHead in inHeads) {
+				var inK = noteKey(inHead);
+				if (_incomingHeads.exists(inK)) continue;
+
 				var laneB:Int = getNoteLane(inHead);
 				if (isPlayerA != (laneB >= keyCount) || laneA == laneB) continue;
 
@@ -1402,16 +1451,10 @@ class SustainConnectModifier extends Modifier {
 			return (a.laneDist < b.laneDist) ? -1 : 1;
 		});
 
-		var claimedOut:Map<String, Bool> = new Map<String, Bool>();
-		var claimedIn:Map<String, Bool> = new Map<String, Bool>();
-
 		for (p in pairs) {
 			var outK = noteKey(p.outNote);
 			var inK = noteKey(p.inHead);
-			if (claimedOut.exists(outK) || claimedIn.exists(inK)) continue;
-
-			claimedOut.set(outK, true);
-			claimedIn.set(inK, true);
+			if (_outgoingLanes.exists(outK) || _incomingHeads.exists(inK)) continue;
 
 			var lA = getNoteLane(p.outNote);
 			var lB = getNoteLane(p.inHead);
@@ -1419,6 +1462,11 @@ class SustainConnectModifier extends Modifier {
 			_outgoingTargetTimes.set(outK, p.inHead.strumTime);
 			_incomingHeads.set(inK, true);
 			_incomingParents.set(inK, lA);
+
+			var firstSus = getFirstSustainChild(p.inHead, allNotes);
+			if (firstSus != null) {
+				_incomingSourceLanes.set(noteKey(firstSus), lA);
+			}
 		}
 	}
 
@@ -1428,53 +1476,14 @@ class SustainConnectModifier extends Modifier {
 		var daNote = (renderer != null && renderer.notes != null && noteData.index >= 0 && noteData.index < renderer.notes.members.length) ? renderer.notes.members[noteData.index] : null;
 		if (daNote == null) return;
 
-		var key:String = noteKey(daNote);
-
-		// 1. Hide head arrow of incoming hold note (seamless ribbon like SAU)
-		if (!daNote.isSustainNote) {
-			if (_incomingHeads.exists(key)) {
-				noteData.alpha = 0.0;
-				noteData.scaleX = 0.0;
-				noteData.scaleY = 0.0;
-				noteData.x = -9999;
-				noteData.y = -9999;
-				daNote.visible = false;
-			}
-			return;
-		}
-
-		var pieceDur:Float = SustainRenderer.getNoteSustainDuration(daNote);
-		var totalDelta:Float = pieceDur * daNote.speed;
-		if (totalDelta <= 0.001) return;
-
-		var baseCurPos:Float = renderer.getNoteCurPos(noteData.index, 0);
-		if ((daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit)) && baseCurPos >= 0)
-			baseCurPos = 0;
-
-		var progress:Float = flixel.math.FlxMath.bound((baseCurPos - curPos) / totalDelta, 0.0, 1.0);
-		var totalLanes:Int = NoteMovement.defaultStrumX.length;
-
-		// Case 1: Outgoing tail slides 0% -> 50% towards target lane
-		if (_outgoingLanes.exists(key)) {
-			var laneB = _outgoingLanes.get(key);
-			if (lane >= 0 && lane < totalLanes && laneB >= 0 && laneB < totalLanes) {
-				var deltaX = NoteMovement.defaultStrumX[laneB] - NoteMovement.defaultStrumX[lane];
-				noteData.x += deltaX * (0.5 * progress) * currentValue;
-			}
-			return;
-		}
-
-		// Case 2: Incoming first slice slides 50% -> 100% into target lane
-		if (isFirstSustainSlice(daNote)) {
-			var p = getParentNote(daNote);
-			var pKey = (p != null) ? noteKey(p) : "";
-			if (_incomingParents.exists(pKey)) {
-				var laneA = _incomingParents.get(pKey);
-				if (laneA >= 0 && laneA < totalLanes && lane >= 0 && lane < totalLanes) {
-					var deltaX = NoteMovement.defaultStrumX[lane] - NoteMovement.defaultStrumX[laneA];
-					noteData.x += deltaX * (-0.5 * (1.0 - progress)) * currentValue;
-				}
-			}
+		// Hide head arrow of incoming hold note (seamless ribbon like SAU)
+		if (!daNote.isSustainNote && _incomingHeads.exists(noteKey(daNote))) {
+			noteData.alpha = 0.0;
+			noteData.scaleX = 0.0;
+			noteData.scaleY = 0.0;
+			noteData.x = -9999;
+			noteData.y = -9999;
+			daNote.visible = false;
 		}
 	}
 
@@ -1483,16 +1492,9 @@ class SustainConnectModifier extends Modifier {
 		currentValue = 0.0;
 		for (subMod in subValues)
 			subMod.value = subMod.baseValue;
-		_outgoingLanes.clear();
-		_outgoingTargetTimes.clear();
-		_incomingHeads.clear();
-		_incomingParents.clear();
-		_lastFrame = -1;
-		_lastSongPos = -999999;
+		clearConnections();
 	}
 }
-
-
 class JumpModifier extends Modifier // custom thingy i made
 {
 	override function noteMath(noteData:NotePositionData, lane:Int, curPos:Float, pf:Int) {

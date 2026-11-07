@@ -172,25 +172,9 @@ class SustainRenderer {
 		);
 
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
-		var isHoldEnd = animName.endsWith("end");
 		var isOutgoing:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote);
 		var isIncoming:Bool = Modifier.SustainConnectModifier.isIncomingConnected(daNote);
-		var isConnected:Bool = isOutgoing || isIncoming;
-
-		if (isConnected) {
-			isHoldEnd = false;
-			if (daNote.animation != null && daNote.animation.getByName("hold") != null) {
-				if (daNote.animation.curAnim == null || daNote.animation.curAnim.name != "hold") {
-					daNote.animation.play("hold");
-				}
-			}
-		} else if (Modifier.SustainConnectModifier.isHoldEndNote(daNote)) {
-			if (daNote.animation != null && daNote.animation.getByName("holdend") != null) {
-				if (daNote.animation.curAnim == null || daNote.animation.curAnim.name != "holdend") {
-					daNote.animation.play("holdend");
-				}
-			}
-		}
+		var isHoldEnd:Bool = !isOutgoing && (animName.endsWith("end") || Modifier.SustainConnectModifier.isHoldEndNote(daNote));
 
 		var stepDuration = getNoteSustainDuration(daNote);
 		var timeToNextSustain = stepDuration;
@@ -212,6 +196,26 @@ class SustainRenderer {
 		var timeOffsetEnd:Float = isHoldEnd ? -timeToNextSustain : -(timeToNextSustain + 1.5);
 		var nextHalfNotePos:NotePositionData = getSustainPoint(renderer, noteData, -timeToNextSustain * 0.5);
 		var nextNotePos:NotePositionData = getSustainPoint(renderer, noteData, timeOffsetEnd);
+
+		var connectModVal:Float = Modifier.SustainConnectModifier.getConnectValue();
+		if (connectModVal > 0.001) {
+			var totalLanes:Int = NoteMovement.defaultStrumX.length;
+			if (isOutgoing) {
+				var targetLane = Modifier.SustainConnectModifier.getOutgoingLane(daNote);
+				if (targetLane >= 0 && targetLane < totalLanes && lane >= 0 && lane < totalLanes) {
+					var deltaX = (NoteMovement.defaultStrumX[targetLane] - NoteMovement.defaultStrumX[lane]) * connectModVal;
+					nextHalfNotePos.x += deltaX * 0.25;
+					nextNotePos.x += deltaX * 0.50;
+				}
+			} else if (isIncoming) {
+				var sourceLane = Modifier.SustainConnectModifier.getIncomingSourceLane(daNote);
+				if (sourceLane >= 0 && sourceLane < totalLanes && lane >= 0 && lane < totalLanes) {
+					var deltaX = (NoteMovement.defaultStrumX[lane] - NoteMovement.defaultStrumX[sourceLane]) * connectModVal;
+					thisNotePos.x -= deltaX * 0.50;
+					nextHalfNotePos.x -= deltaX * 0.25;
+				}
+			}
+		}
 
 		var flipGraphic = (noteData.noteDist > 0);
 		var fixedAngY = ((noteData.incomingAngleY % 360) + 360) % 360;
