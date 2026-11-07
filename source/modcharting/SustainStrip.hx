@@ -34,7 +34,20 @@ class SustainStrip extends FlxStrip
 
     public function updateGraphic(?force:Bool = false):Void {
         if (daNote == null) return;
-        var frameChanged:Bool = (daNote.frame != loadedFrame);
+
+        var isConnected:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote) || Modifier.SustainConnectModifier.isIncomingConnected(daNote);
+        var targetFrame = daNote.frame;
+
+        if (isConnected && daNote.animation != null && daNote.animation.getByName("hold") != null) {
+            var hAnim = daNote.animation.getByName("hold");
+            if (hAnim != null && hAnim.frames != null && hAnim.frames.length > 0 && daNote.frames != null) {
+                var fIdx = (hAnim.frames.length > 1) ? hAnim.frames[1] : hAnim.frames[0];
+                if (fIdx >= 0 && fIdx < daNote.frames.frames.length)
+                    targetFrame = daNote.frames.frames[fIdx];
+            }
+        }
+
+        var frameChanged:Bool = (targetFrame != loadedFrame);
         if (!force && !frameChanged && loadedValidGraphic && graphic != null && graphic.bitmap != null && graphic.bitmap.width > 1 && graphic.bitmap.height > 1)
             return;
 
@@ -43,11 +56,12 @@ class SustainStrip extends FlxStrip
             // vertical reflection (reflected sprite) deterministically in both PlayState and Editor.
             var wasFlipped = daNote.flipY;
             daNote.flipY = false;
-            var pixels = daNote.updateFramePixels();
+            var pixels:openfl.display.BitmapData = null;
+            if (targetFrame != null && targetFrame.parent != null && targetFrame.parent.bitmap != null) {
+                pixels = targetFrame.paint(null, null, false, false);
+            }
             if (pixels == null) {
-                var frame = daNote.frame;
-                if (frame != null && frame.parent != null && frame.parent.bitmap != null)
-                    pixels = frame.paint(null, null, false, false);
+                pixels = daNote.updateFramePixels();
             }
             daNote.flipY = wasFlipped;
 
@@ -56,7 +70,7 @@ class SustainStrip extends FlxStrip
                 shader = daNote.shader;
                 antialiasing = daNote.antialiasing;
                 loadedValidGraphic = true;
-                loadedFrame = daNote.frame;
+                loadedFrame = targetFrame;
             }
         } catch (e:Dynamic) {}
     }
@@ -90,7 +104,8 @@ class SustainStrip extends FlxStrip
 
     public function constructVertices(noteData:NotePositionData, thisNotePos:Vector3D, nextHalfNotePos:NotePositionData, nextNotePos:NotePositionData, flipGraphic:Bool, reverseClip:Bool)
     {
-        if (!loadedValidGraphic)
+        var isConnected:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote) || Modifier.SustainConnectModifier.isIncomingConnected(daNote);
+        if (!loadedValidGraphic || daNote.frame != loadedFrame || isConnected)
             updateGraphic();
 
         var yOffset:Float = flipGraphic ? 1 : -1; // fix small rasterizer gaps along scroll direction

@@ -1204,6 +1204,7 @@ class SustainConnectModifier extends Modifier {
 	static var _lastFrame:Int = -1;
 	static var _lastSongPos:Float = -999999;
 	static var _outgoingLanes:Map<String, Int> = new Map<String, Int>();
+	static var _outgoingTargetTimes:Map<String, Float> = new Map<String, Float>();
 	static var _incomingHeads:Map<String, Bool> = new Map<String, Bool>();
 	static var _incomingParents:Map<String, Int> = new Map<String, Int>();
 
@@ -1299,10 +1300,25 @@ class SustainConnectModifier extends Modifier {
 		return _outgoingLanes.exists(noteKey(daNote));
 	}
 
+	public static function getOutgoingTargetTime(daNote:Dynamic):Float {
+		if (daNote == null) return -1;
+		var key = noteKey(daNote);
+		return _outgoingTargetTimes.exists(key) ? _outgoingTargetTimes.get(key) : -1;
+	}
+
+	public static function isIncomingConnected(daNote:Dynamic):Bool {
+		if (daNote == null || currentInstance == null || Math.abs(currentInstance.currentValue) <= 0.001) return false;
+		if (!daNote.isSustainNote || !isFirstSustainSlice(daNote)) return false;
+		var p = getParentNote(daNote);
+		var pKey = (p != null) ? noteKey(p) : "";
+		return _incomingParents.exists(pKey);
+	}
+
 	public static function rebuildFrameConnections(r:PlayfieldRenderer):Void {
 		_lastFrame = (flixel.FlxG.game != null) ? flixel.FlxG.game.ticks : 0;
 		_lastSongPos = game.Conductor.songPosition;
 		_outgoingLanes.clear();
+		_outgoingTargetTimes.clear();
 		_incomingHeads.clear();
 		_incomingParents.clear();
 
@@ -1400,6 +1416,7 @@ class SustainConnectModifier extends Modifier {
 			var lA = getNoteLane(p.outNote);
 			var lB = getNoteLane(p.inHead);
 			_outgoingLanes.set(outK, lB);
+			_outgoingTargetTimes.set(outK, p.inHead.strumTime);
 			_incomingHeads.set(inK, true);
 			_incomingParents.set(inK, lA);
 		}
@@ -1467,6 +1484,7 @@ class SustainConnectModifier extends Modifier {
 		for (subMod in subValues)
 			subMod.value = subMod.baseValue;
 		_outgoingLanes.clear();
+		_outgoingTargetTimes.clear();
 		_incomingHeads.clear();
 		_incomingParents.clear();
 		_lastFrame = -1;

@@ -173,15 +173,34 @@ class SustainRenderer {
 
 		var animName = (daNote.animation.curAnim != null) ? daNote.animation.curAnim.name : "";
 		var isHoldEnd = animName.endsWith("end");
-		var isConnected:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote);
+		var isOutgoing:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote);
+		var isIncoming:Bool = Modifier.SustainConnectModifier.isIncomingConnected(daNote);
+		var isConnected:Bool = isOutgoing || isIncoming;
+
 		if (isConnected) {
 			isHoldEnd = false;
+			if (daNote.animation != null && daNote.animation.getByName("hold") != null) {
+				if (daNote.animation.curAnim == null || daNote.animation.curAnim.name != "hold") {
+					daNote.animation.play("hold");
+				}
+			}
+		} else if (Modifier.SustainConnectModifier.isHoldEndNote(daNote)) {
+			if (daNote.animation != null && daNote.animation.getByName("holdend") != null) {
+				if (daNote.animation.curAnim == null || daNote.animation.curAnim.name != "holdend") {
+					daNote.animation.play("holdend");
+				}
+			}
 		}
 
 		var stepDuration = getNoteSustainDuration(daNote);
 		var timeToNextSustain = stepDuration;
 
-		if (isHoldEnd) {
+		if (isOutgoing) {
+			var targetTime = Modifier.SustainConnectModifier.getOutgoingTargetTime(daNote);
+			if (targetTime > daNote.strumTime) {
+				timeToNextSustain = targetTime - daNote.strumTime;
+			}
+		} else if (isHoldEnd) {
 			var baseScale:Float = NoteMovement.defaultScale.length > lane ? NoteMovement.defaultScale[lane] : 0.7;
 			var capHeight:Float = daNote.frameHeight * baseScale;
 			var speedFactor:Float = daNote.speed * 0.45;
