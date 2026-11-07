@@ -104,10 +104,7 @@ class SustainStrip extends FlxStrip
 
     public function constructVertices(noteData:NotePositionData, thisNotePos:Vector3D, nextHalfNotePos:NotePositionData, nextNotePos:NotePositionData, flipGraphic:Bool, reverseClip:Bool)
     {
-        var isOutgoing:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote);
-        var isIncoming:Bool = Modifier.SustainConnectModifier.isIncomingConnected(daNote);
-        var isConnected:Bool = isOutgoing || isIncoming;
-
+        var isConnected:Bool = Modifier.SustainConnectModifier.isOutgoingConnected(daNote) || Modifier.SustainConnectModifier.isIncomingConnected(daNote);
         if (!loadedValidGraphic || daNote.frame != loadedFrame || isConnected)
             updateGraphic();
 
@@ -124,68 +121,25 @@ class SustainStrip extends FlxStrip
         var halfScale = safeScale(nextHalfNotePos.z) * nextHalfNotePos.scaleX;
         var nextScale = safeScale(nextNotePos.z) * nextNotePos.scaleX;
 
-        var baseW0:Float = daNote.frameWidth * thisScale;
-        var baseW1:Float = daNote.frameWidth * halfScale;
-        var baseW2:Float = daNote.frameWidth * nextScale;
-
-        var wFactor0:Float = 1.0;
-        var wFactor1:Float = 1.0;
-        var wFactor2:Float = 1.0;
-
-        if (isConnected) {
-            var dx:Float = nextNotePos.x - thisNotePos.x;
-            var dy:Float = nextNotePos.y - thisNotePos.y;
-            var absDy:Float = Math.abs(dy);
-            var compFactor:Float = 1.0;
-            if (absDy > 1.0 && Math.abs(dx) > 1.0) {
-                var dist:Float = Math.sqrt(dx * dx + dy * dy);
-                compFactor = dist / absDy;
-                if (compFactor > 4.5) compFactor = 4.5;
-                if (compFactor < 1.0) compFactor = 1.0;
-            }
-
-            if (isOutgoing && isIncoming) {
-                wFactor0 = compFactor;
-                wFactor1 = compFactor;
-                wFactor2 = compFactor;
-            } else if (isOutgoing) {
-                // Outgoing starts in lane A (factor 1.0) and widens to compFactor at the midpoint
-                wFactor0 = 1.0;
-                wFactor1 = 1.0 + (compFactor - 1.0) * 0.5;
-                wFactor2 = compFactor;
-            } else {
-                // Incoming starts at compFactor at the midpoint and narrows back to 1.0 in lane B
-                wFactor0 = compFactor;
-                wFactor1 = 1.0 + (compFactor - 1.0) * 0.5;
-                wFactor2 = 1.0;
-            }
-        }
-
-        var w0:Float = baseW0 * wFactor0;
-        var w1:Float = baseW1 * wFactor1;
-        var w2:Float = baseW2 * wFactor2;
-
-        var centerX0:Float = thisNotePos.x + (baseW0 * 0.5);
-        var centerX1:Float = nextHalfNotePos.x + (baseW1 * 0.5);
-        var centerX2:Float = nextNotePos.x + (baseW2 * 0.5);
-
         // ReflectedSprite-style natural projection:
         // UV y = 0 is the flat base cut, UV y = 1 is the rounded cap.
-        // Vertices are symmetrically centered so diagonal slopes maintain
-        // uniform perpendicular thickness even across distant lanes (e.g. Left -> Right).
-        cachedVerts[0] = centerX0 - (w0 * 0.5);
+        // thisNotePos is always the base (anchored at note head / previous piece).
+        // nextNotePos is always the tail (extending along the scroll path).
+        // In Upscroll: thisNotePos is top, nextNotePos is bottom -> base at top, cap at bottom.
+        // In Downscroll: thisNotePos is bottom, nextNotePos is top -> base at bottom, cap at top (reflected).
+        cachedVerts[0] = thisNotePos.x;
         cachedVerts[1] = thisNotePos.y + yOffset;
-        cachedVerts[2] = centerX0 + (w0 * 0.5);
+        cachedVerts[2] = thisNotePos.x + (daNote.frameWidth * thisScale);
         cachedVerts[3] = thisNotePos.y + yOffset;
 
-        cachedVerts[4] = centerX1 - (w1 * 0.5);
+        cachedVerts[4] = nextHalfNotePos.x;
         cachedVerts[5] = nextHalfNotePos.y + yOffset;
-        cachedVerts[6] = centerX1 + (w1 * 0.5);
+        cachedVerts[6] = nextHalfNotePos.x + (daNote.frameWidth * halfScale);
         cachedVerts[7] = nextHalfNotePos.y + yOffset;
 
-        cachedVerts[8] = centerX2 - (w2 * 0.5);
+        cachedVerts[8] = nextNotePos.x;
         cachedVerts[9] = nextNotePos.y + yOffset;
-        cachedVerts[10] = centerX2 + (w2 * 0.5);
+        cachedVerts[10] = nextNotePos.x + (daNote.frameWidth * nextScale);
         cachedVerts[11] = nextNotePos.y + yOffset;
 
         // Optimized zero-allocation vertex update (no cachedVerts.copy() per frame)
